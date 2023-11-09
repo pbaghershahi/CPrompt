@@ -1,0 +1,66 @@
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.optim import Adam
+from torch.optim.lr_scheduler import StepLR
+import numpy as np
+import matplotlib.pyplot as plt
+import pandas as pd
+from typing import List
+from torch_geometric.data import Data
+from torch_geometric.utils import augmentation
+from torch_geometric.nn import GAT, GATConv
+from torch_geometric.datasets import QM9, TUDataset
+from torch_geometric.loader import DataLoader
+from torch_geometric.nn import global_mean_pool
+
+def drop_edges(org_graph, n_drops):
+    perm = torch.randperm(org_graph.edge_index.size(1))[n_drops:]
+    org_graph.edge_index = org_graph.edge_index[:, perm]
+    return org_graph
+
+class PromptGraph(nn.Module):
+    def __init__(self, num_pnodes, emb_dim) -> None:
+        super(PromptGraph, self).__init__()
+        self.prompt_x = nn.Parameter(torch.empty((num_pnodes, emb_dim), dtype=torch.float), requires_grad=True)
+        nn.init.xavier_uniform_(self.prompt_x)
+
+    def forward(self, graphs):
+        # prompt_x = torch.tile(self.prompt_x, dims=(input_feats.size(0), 1, 1))
+        # feats = torch.cat((input_feats, self.prompt_x), dim=0)
+        # adj_probs = torch
+        prompt_adj = self.prompt_x @ self.prompt_x.T
+        adj_prompt = F.sigmoid(prompt_adj)
+        adj_prompt = torch.triu(torch.triu, diagonal=1)
+        adj_prompt = torch.where(adj_prompt >= 0.5, 1.0, 0.0) + self.prompt_x.size(0)
+        for graph in graphs:
+            adj_probs = graph.x @ self.prompt_x.T
+            adj_matrix = F.sigmoid(adj_probs)
+            adj_matrix = torch.where(adj_matrix >= 0.5, 1.0, 0.0)
+            adj_matrix[:, 1] += self.prompt_x.size(0)
+            graph.x = torch.cat((graph.x, self.prompt_x), dim=0)
+            graph.edge_index = torch.cat((graph.edge_index, adj_prompt.T, adj_matrix.T), dim=1)
+        return graphs
+
+class GNNGraphClass(nn.Module):
+    def __init__(self, input_dim, hidden_dim, output_dim=None, num_layers=1, normalize=True) -> None:
+        super(GNNGraphClass, self).__init__()
+        output_dim = hidden_dim if output_dim is None else output_dim
+        in_dims = [input_dim]+[hidden_dim]*(num_layers-1)
+        out_dims = [hidden_dim]*(num_layers)
+        inner_layers = [GATConv(in_dim, out_dim) for (in_dim, out_dim) in zip(in_dims, out_dims)]
+        if normalize:
+            inner_layers = [inner_layers[i//2] if i%2==0 else nn.BatchNorm1d(out_dims[i//2]) for i in range(num_layers*2)]
+        self.gnn_layers = nn.ModuleList(inner_layers)
+        self.head = nn.Linear(hidden_dim, output_dim)
+
+    def forward(self, graph_x, edge_index, batch):
+        emb_out = graph_x.squeeze().to(torch.float32)
+        for i in range(0, len(self.gnn_layers), 2):
+            emb_out = self.gnn_layers[i](emb_out, edge_index)
+            emb_out = F.relu(self.gnn_layers[i+1](emb_out))
+        emb_out = global_mean_pool(emb_out, batch)
+        emb_out = F.dropout(emb_out, p=0.5, training=self.training)
+        emb_out = self.head(emb_out)
+        # emb_out = F.sigmoid(emb_out)
+        return emb_out
