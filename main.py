@@ -8,7 +8,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from torch_geometric.datasets import TUDataset
 from torch_geometric.loader import DataLoader
-from .model import GNNGraphClass
+from model import GNNGraphClass
+from utils import test, load_model, drop_edges
 
 graph_data = TUDataset(root='data/TUDataset', name='MUTAG')
 
@@ -43,8 +44,8 @@ for epoch in range(n_epochs):
         loss.backward()
         optimizer.step()
         # print(loss.data)
-    train_acc = test(train_loader)
-    test_acc = test(test_loader)
+    train_acc = test(train_loader, model)
+    test_acc = test(test_loader, model)
     print(f'{train_acc:.3f}, {test_acc:.3f}')
 
 save_model = True
