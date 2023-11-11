@@ -20,13 +20,13 @@ def test(loader, model):
 
 def drop_edges(org_graph, drop_prob):
     n_edges = org_graph.edge_index.size(1)
-    perm = torch.randperm(n_edges)[int(n_edges * n_drops):]
+    perm = torch.randperm(n_edges)[int(n_edges * drop_prob):]
     org_graph.edge_index = org_graph.edge_index[:, perm]
     return org_graph
 
-def load_model_(self, cmodel, pmodel, read_checkpoint=True, pretrained_path=None):
+def load_model(cmodel, pmodel=None, read_checkpoint=True, pretrained_path=None):
     if read_checkpoint and pretrained_path is not None:
-        pretrained_dict = torch.load(pretrained_path)
+        pretrained_dict = torch.load(pretrained_path)["model_state_dict"]
     else:
         pretrained_dict = pmodel.state_dict()
     model_dict = cmodel.state_dict()
