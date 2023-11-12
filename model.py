@@ -14,13 +14,14 @@ from torch_geometric.nn import GATConv
 from torch_geometric.datasets import QM9, TUDataset
 from torch_geometric.loader import DataLoader
 from torch_geometric.nn import global_mean_pool
+from utils import simmatToadj
 
 
 class PromptGraph(nn.Module):
     def __init__(self, num_pnodes, emb_dim) -> None:
         super(PromptGraph, self).__init__()
-        self.prompt_x = nn.Parameter(torch.empty((num_pnodes, emb_dim), dtype=torch.float), requires_grad=True)
-        nn.init.xavier_uniform_(self.prompt_x)
+        self.prompt_x = nn.Parameter(torch.FloatTensor(num_pnodes, emb_dim), requires_grad=True)
+        nn.init.kaiming_uniform_(self.prompt_x)
 
     def forward(self, graphs):
         # prompt_x = torch.tile(self.prompt_x, dims=(input_feats.size(0), 1, 1))
@@ -28,15 +29,15 @@ class PromptGraph(nn.Module):
         # adj_probs = torch
         prompt_adj = self.prompt_x @ self.prompt_x.T
         adj_prompt = F.sigmoid(prompt_adj)
-        adj_prompt = torch.triu(torch.triu, diagonal=1)
-        adj_prompt = torch.where(adj_prompt >= 0.5, 1.0, 0.0) + self.prompt_x.size(0)
+        adj_prompt = torch.triu(adj_prompt, diagonal=1)
+        adj_prompt = simmatToadj(adj_prompt) + self.prompt_x.size(0)
         for graph in graphs:
             adj_probs = graph.x @ self.prompt_x.T
             adj_matrix = F.sigmoid(adj_probs)
-            adj_matrix = torch.where(adj_matrix >= 0.5, 1.0, 0.0)
-            adj_matrix[:, 1] += self.prompt_x.size(0)
+            adj_matrix = simmatToadj(adj_matrix)
+            adj_matrix[1, :] += self.prompt_x.size(0)
             graph.x = torch.cat((graph.x, self.prompt_x), dim=0)
-            graph.edge_index = torch.cat((graph.edge_index, adj_prompt.T, adj_matrix.T), dim=1)
+            graph.edge_index = torch.cat((graph.edge_index, adj_prompt, adj_matrix), dim=1)
         return graphs
 
 class GNNGraphClass(nn.Module):

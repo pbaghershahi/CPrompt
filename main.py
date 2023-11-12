@@ -38,14 +38,17 @@ n_epochs = 200
 for epoch in range(n_epochs):
     model.train()
     for data in train_loader:
+        data = data.to(device)
         optimizer.zero_grad()
         emb_out = model(data.x, data.edge_index, data.batch)
         loss = obj_fun(emb_out, data.y)
         loss.backward()
         optimizer.step()
         # print(loss.data)
+    model.to('cpu')
     train_acc = test(train_loader, model)
     test_acc = test(test_loader, model)
+    model.to(device)
     print(f'{train_acc:.3f}, {test_acc:.3f}')
 
 save_model = True
