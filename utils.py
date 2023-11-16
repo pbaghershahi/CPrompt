@@ -40,7 +40,7 @@ def simmatToadj(adjacency_matrix):
         dim=0)
     return adjacency_matrix
 
-def contrastie_loss(emb_mat1, emb_mat2, n_prompt, temperature=1, device='cpu'):
+def contrastive_loss(emb_mat1, emb_mat2, n_prompt, temperature=1, device='cpu'):
     sim_mat = (emb_mat1 @ emb_mat2.T)[None, :].tile(n_prompt, 1)
     # sim_mat /= temperature
     pos_scores = sim_mat.diagonal(offset=n_prompt)

@@ -24,20 +24,18 @@ class PromptGraph(nn.Module):
         nn.init.kaiming_uniform_(self.prompt_x)
 
     def forward(self, graphs):
-        # prompt_x = torch.tile(self.prompt_x, dims=(input_feats.size(0), 1, 1))
-        # feats = torch.cat((input_feats, self.prompt_x), dim=0)
-        # adj_probs = torch
         prompt_adj = self.prompt_x @ self.prompt_x.T
         adj_prompt = F.sigmoid(prompt_adj)
         adj_prompt = torch.triu(adj_prompt, diagonal=1)
-        adj_prompt = simmatToadj(adj_prompt) + self.prompt_x.size(0)
+        adj_prompt = simmatToadj(adj_prompt)
         for graph in graphs:
+            cnum_nodes = graph.x.size(0)
             adj_probs = graph.x @ self.prompt_x.T
             adj_matrix = F.sigmoid(adj_probs)
             adj_matrix = simmatToadj(adj_matrix)
-            adj_matrix[1, :] += self.prompt_x.size(0)
+            adj_matrix[1, :] += cnum_nodes
             graph.x = torch.cat((graph.x, self.prompt_x), dim=0)
-            graph.edge_index = torch.cat((graph.edge_index, adj_prompt, adj_matrix), dim=1)
+            graph.edge_index = torch.cat((graph.edge_index, adj_matrix, adj_prompt+cnum_nodes), dim=1)
         return graphs
 
 class GNNGraphClass(nn.Module):
