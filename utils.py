@@ -9,6 +9,13 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from typing import List
 
+def normalize(input_tensor, dim=0):
+    mean = input_tensor.mean(dim=dim)
+    std = input_tensor.std(dim=dim)
+    std = torch.max(std, torch.ones_like(std)*1e-12)
+    input_tensor.sub_(mean).div_(std)
+    return input_tensor
+
 def test(loader, model):
     model.eval()
     correct = 0

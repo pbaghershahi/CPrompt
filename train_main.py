@@ -9,15 +9,20 @@ import matplotlib.pyplot as plt
 from torch_geometric.datasets import TUDataset
 from torch_geometric.loader import DataLoader
 from model import GNNGraphClass
-from utils import test, load_model, drop_edges
+from utils import test, load_model, drop_edges, normalize
 
-graph_data = TUDataset(root='data/TUDataset', name='MUTAG')
+# graph_data = TUDataset(root='data/TUDataset', name='MUTAG')
+graph_data = TUDataset(root='data/TUDataset', name='PROTEINS_full', use_node_attr=True)
+
 
 torch.manual_seed(432)
 dataset = graph_data.shuffle()
 
-train_dataset = dataset[:150]
-test_dataset = dataset[150:]
+for graph in dataset:
+    graph.x = normalize(graph.x, dim=0)
+n_train = int(len(dataset)*0.9)
+train_dataset = dataset[:n_train]
+test_dataset = dataset[n_train:]
 
 train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
 test_loader = DataLoader(test_dataset, batch_size=64, shuffle=False)
@@ -61,7 +66,5 @@ if save_model:
             'epoch': epoch,
             'model_state_dict': model.state_dict(),
             'optimizer_state_dict': optimizer.state_dict(),
-            # 'scheduler_state_dict': self.scheduler.state_dict(),
-            # 'loss': self.tr_metrics['valid_loss'][-1],
         }, os.path.join(model_dir, f'model_{name}.pt')
     )

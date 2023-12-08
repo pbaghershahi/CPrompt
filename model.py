@@ -55,6 +55,7 @@ class GNNGraphClass(nn.Module):
 
     def forward(self, graph_x, edge_index, batch):
         emb_out = graph_x.squeeze().to(torch.float32)
+
         i = 0
         while i < len(self.gnn_layers):
             emb_out = self.gnn_layers[i](emb_out, edge_index)
