@@ -7,16 +7,11 @@ from torch.optim.lr_scheduler import StepLR
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
-from typing import List
-from torch_geometric.data import Data, Batch
-from torchvision.transforms.functional import normalize
-from torch_geometric.utils import augmentation, to_dense_adj
-from torch_geometric.nn import GAT, GATConv, GCNConv
-from torch_geometric.datasets import QM9, TUDataset
-from torch_geometric.loader import DataLoader, DenseDataLoader
-from torch_geometric.nn import global_mean_pool
-from utils import test, load_model, drop_edges, normalize_, contrastive_loss, glist_to_gbatch
-from model import GNNGraphClass, PromptGraph
+from torch_geometric.utils import to_dense_adj
+from torch_geometric.datasets import TUDataset
+from torch_geometric.loader import DataLoader
+from utils import *
+from model import GNNGraphClass, LinkPredictionPrompt
 from copy import deepcopy
 
 # dataset = TUDataset(root='data/TUDataset', name='PROTEINS_full', use_node_attr=True)
@@ -51,7 +46,7 @@ n_pnodes = 5
 
 enc_model = GNNGraphClass(dataset.x.size(1), h_dim, output_dim=dataset.num_classes, num_layers=n_layers, normalize=True, has_head=False)
 main_model = GNNGraphClass(dataset.x.size(1), h_dim, output_dim=dataset.num_classes, num_layers=n_layers, normalize=True, has_head=True)
-pmodel = PromptGraph(n_pnodes, dataset.x.size(1), ph_dim, o_dim)
+pmodel = LinkPredictionPrompt(n_pnodes, dataset.x.size(1), ph_dim, o_dim)
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 enc_model.to(device)
 main_model.to(device)

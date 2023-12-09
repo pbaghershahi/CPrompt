@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 from torch_geometric.datasets import TUDataset
 from torch_geometric.loader import DataLoader
 from model import GNNGraphClass
-from utils import test, load_model, drop_edges, normalize_
+from utils import test, normalize_
 
 # dataset = TUDataset(root='data/TUDataset', name='MUTAG')
 # dataset = TUDataset(root='data/TUDataset', name='NCI1')
