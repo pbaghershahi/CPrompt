@@ -44,7 +44,7 @@ for epoch in range(n_epochs):
     for data in train_loader:
         data = data.to(device)
         optimizer.zero_grad()
-        emb_out = model(data.x, data.edge_index, data.batch)
+        emb_out = model(data.x, data.edge_index, data.edge_attr, data.batch)
         loss = obj_fun(emb_out, data.y)
         loss.backward()
         optimizer.step()

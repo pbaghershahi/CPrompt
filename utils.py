@@ -5,9 +5,14 @@ from datetime import datetime
 from torch.optim import Adam
 from torch.optim.lr_scheduler import StepLR
 import numpy as np
+from torch_geometric.loader import DataLoader
 import matplotlib.pyplot as plt
 import pandas as pd
 from typing import List
+
+def glist_to_gbatch(graph_list):
+    g_loader = DataLoader(graph_list, batch_size=len(graph_list))
+    return next(iter(g_loader))
 
 def normalize_(input_tensor, dim=0):
     mean = input_tensor.mean(dim=dim)
@@ -20,7 +25,7 @@ def test(loader, model):
     model.eval()
     correct = 0
     for data in loader:
-        out = model(data.x, data.edge_index, data.batch)
+        out = model(data.x, data.edge_index, data.edge_attr, data.batch)
         pred = out.max(dim=1)[1]
         correct += int((pred == data.y).sum())
     return correct / len(loader.dataset)
