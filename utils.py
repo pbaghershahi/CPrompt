@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from typing import List
 
-def normalize(input_tensor, dim=0):
+def normalize_(input_tensor, dim=0):
     mean = input_tensor.mean(dim=dim)
     std = input_tensor.std(dim=dim)
     std = torch.max(std, torch.ones_like(std)*1e-12)
@@ -48,12 +48,13 @@ def simmatToadj(adjacency_matrix):
     return adjacency_matrix
 
 def contrastive_loss(emb_mat1, emb_mat2, n_prompt, temperature=1, device='cpu'):
-    sim_mat = (emb_mat1 @ emb_mat2.T)[None, :].tile(n_prompt, 1)
+    sim_mat = emb_mat1 @ emb_mat2.T
     # sim_mat /= temperature
-    pos_scores = sim_mat.diagonal(offset=n_prompt)
-    s_mask = (~(torch.diag(torch.ones((n_prompt)), diagonal=n_prompt)[:n_prompt, :]).bool()).float()
+    s_mask = (~(torch.diag(torch.ones((n_prompt)), diagonal=sim_mat.size(1)-n_prompt)[:n_prompt, :]).bool()).float()
     s_mask = s_mask.to(device)
     sim_mat *= s_mask
+    sim_mat = sim_mat.flip(dims=(0,))
+    pos_scores = sim_mat.flip(dims=(0,)).diagonal(offset=sim_mat.size(1)-n_prompt)
     neg_scores = torch.logsumexp(sim_mat, dim=1)
     loss_partial = neg_scores - pos_scores
     loss = torch.mean(loss_partial)

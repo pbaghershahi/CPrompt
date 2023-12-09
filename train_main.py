@@ -9,17 +9,16 @@ import matplotlib.pyplot as plt
 from torch_geometric.datasets import TUDataset
 from torch_geometric.loader import DataLoader
 from model import GNNGraphClass
-from utils import test, load_model, drop_edges, normalize
+from utils import test, load_model, drop_edges, normalize_
 
-# graph_data = TUDataset(root='data/TUDataset', name='MUTAG')
-graph_data = TUDataset(root='data/TUDataset', name='PROTEINS_full', use_node_attr=True)
+# dataset = TUDataset(root='data/TUDataset', name='MUTAG')
+# dataset = TUDataset(root='data/TUDataset', name='NCI1')
+dataset = TUDataset(root='data/TUDataset', name='PROTEINS_full')
 
 
 torch.manual_seed(432)
-dataset = graph_data.shuffle()
-
-for graph in dataset:
-    graph.x = normalize(graph.x, dim=0)
+dataset = dataset.shuffle()
+normalize_(dataset.x)
 n_train = int(len(dataset)*0.9)
 train_dataset = dataset[:n_train]
 test_dataset = dataset[n_train:]
@@ -28,10 +27,10 @@ train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
 test_loader = DataLoader(test_dataset, batch_size=64, shuffle=False)
 
 h_dim = 64
-n_layers = 3
+n_layers = 2
 n_pnodes = 100
 
-model = GNNGraphClass(graph_data.x.size(1), h_dim, output_dim=dataset.num_classes, num_layers=n_layers, normalize=True)
+model = GNNGraphClass(dataset.x.size(1), h_dim, output_dim=dataset.num_classes, num_layers=n_layers, normalize=True)
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 model.to(device)
 for d in train_loader:
@@ -51,10 +50,10 @@ for epoch in range(n_epochs):
         optimizer.step()
         # print(loss.data)
     model.to('cpu')
-    train_acc = test(train_loader, model)
+    # train_acc = test(train_loader, model)
     test_acc = test(test_loader, model)
     model.to(device)
-    print(f'{train_acc:.3f}, {test_acc:.3f}')
+    print(f'train loss {loss:.3f}, test accuracy {test_acc:.3f}')
 
 save_model = True
 if save_model:
