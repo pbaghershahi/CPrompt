@@ -52,14 +52,30 @@ def simmatToadj(adjacency_matrix):
         dim=0)
     return adjacency_matrix
 
-def contrastive_loss(emb_mat1, emb_mat2, n_prompt, temperature=1, device='cpu'):
-    sim_mat = emb_mat1 @ emb_mat2.T
-    # sim_mat /= temperature
-    s_mask = (~(torch.diag(torch.ones((n_prompt)), diagonal=sim_mat.size(1)-n_prompt)[:n_prompt, :]).bool()).float()
-    s_mask = s_mask.to(device)
-    sim_mat *= s_mask
-    sim_mat = sim_mat.flip(dims=(0,))
-    pos_scores = sim_mat.flip(dims=(0,)).diagonal(offset=sim_mat.size(1)-n_prompt)
+"""
+Contrastive loss between two augmented graphs of one original graph 
+with other graphs of a batch.
+"""
+# def contrastive_loss(emb_mat1, emb_mat2, n_prompt, temperature=1, device='cpu'):
+#     sim_mat = emb_mat1 @ emb_mat2.T
+#     s_mask = (~(torch.diag(torch.ones((n_prompt)), diagonal=sim_mat.size(1)-n_prompt)[:n_prompt, :]).bool()).float()
+#     s_mask = s_mask.to(device)
+#     sim_mat *= s_mask
+#     sim_mat = sim_mat.flip(dims=(0,))
+#     pos_scores = sim_mat.flip(dims=(0,)).diagonal(offset=sim_mat.size(1)-n_prompt)
+#     neg_scores = torch.logsumexp(sim_mat, dim=1)
+#     loss_partial = neg_scores - pos_scores
+#     loss = torch.mean(loss_partial)
+#     return loss
+
+"""
+Contrastive loss between a graph and its augmentation for all 
+original graphs with other graphs of a batch.
+"""
+
+def contrastive_loss(emb_mat, temperature=1, device='cpu'):
+    sim_mat = emb_mat[:emb_mat.size(0)//2, :] @ emb_mat[emb_mat.size(0)//2:, :].T
+    pos_scores = sim_mat.diagonal()
     neg_scores = torch.logsumexp(sim_mat, dim=1)
     loss_partial = neg_scores - pos_scores
     loss = torch.mean(loss_partial)
