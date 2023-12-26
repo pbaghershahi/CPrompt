@@ -38,48 +38,81 @@ class PromptGraph(nn.Module):
             graph.edge_index = torch.cat((graph.edge_index, adj_matrix, adj_prompt+cnum_nodes), dim=1)
         return graphs
 
-class GNNGraphClass(nn.Module):
-    def __init__(self, input_dim, hidden_dim, output_dim=None, num_layers=1, normalize=True, has_head=True) -> None:
-        super(GNNGraphClass, self).__init__()
-        output_dim = hidden_dim if output_dim is None else output_dim
-        in_dims = [input_dim]+[hidden_dim]*(num_layers-1)
-        out_dims = [hidden_dim]*(num_layers)
-        inner_layers = [GCNConv(in_dim, out_dim) for (in_dim, out_dim) in zip(in_dims, out_dims)]
-        self.normalize = normalize
-        if normalize:
-            inner_layers = [inner_layers[i//2] if i%2==0 else nn.BatchNorm1d(out_dims[i//2]) for i in range(num_layers*2)]
-        self.gnn_layers = nn.ModuleList(inner_layers)
-        self.has_head = has_head
-        if has_head and output_dim is not None:
-            self.head = nn.Linear(hidden_dim, output_dim)
 
-    def forward(self, graph_x, edge_index, weights=None, batch=None):
-        emb_out = graph_x.squeeze().to(torch.float32)
+class GCN(nn.Module):
+    def __init__(self, nfeat, nhid, nclass, dropout):
+        super(GCN, self).__init__()
+        self.gc1 = GraphConvolution(nfeat, nhid)
+        self.gc2 = GraphConvolution(nhid, nhid)
+        self.head = nn.Linear(nhid, nclass)
+        self.dropout = dropout
 
-        i = 0
-        while i < len(self.gnn_layers):
-            if weights is None:
-                emb_out = self.gnn_layers[i](emb_out, edge_index)
-            else:
-                emb_out = self.gnn_layers[i](emb_out, edge_index, weights)
-            if self.normalize:
-                i += 1
-                emb_out = F.relu(self.gnn_layers[i](emb_out))
-            i += 1
-        emb_out = global_mean_pool(emb_out, batch)
-        emb_out = F.dropout(emb_out, p=0.1, training=self.training)
-        if self.has_head:
-            emb_out = self.head(emb_out)
-        return emb_out
-    
+    def forward(self, x_adj_list):
+        g_embeds = []
+        for i, (x, adj) in enumerate(x_adj_list):
+            x = F.relu(self.gc1(x, adj))
+            x = F.dropout(x, self.dropout, training=self.training)
+            # x = self.gc2(x, adj)
+            g_embeds.append(x.mean(dim=0))
+            # return F.log_softmax(x, dim=1)
+        g_ambeds = torch.stack(g_embeds)
+        scores = self.head(g_ambeds)
+        return scores
+
+
+class GraphConvolution(nn.Module):
+    """
+    Simple GCN layer, similar to https://arxiv.org/abs/1609.02907
+    """
+
+    def __init__(self, in_features, out_features, bias=True):
+        super(GraphConvolution, self).__init__()
+        self.in_features = in_features
+        self.out_features = out_features
+        self.weight = nn.Parameter(torch.FloatTensor(in_features, out_features))
+        if bias:
+            self.bias = nn.Parameter(torch.FloatTensor(out_features))
+        else:
+            self.register_parameter('bias', None)
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        stdv = 1. / np.sqrt(self.weight.size(1))
+        self.weight.data.uniform_(-stdv, stdv)
+        if self.bias is not None:
+            self.bias.data.uniform_(-stdv, stdv)
+
+    def forward(self, input_x, adj):
+        support = torch.mm(input_x, self.weight)
+        # print("self.weight: ", self.weight)
+        output = torch.spmm(adj, support)
+        if self.bias is not None:
+            return output + self.bias
+        else:
+            return output
+
+    def __repr__(self):
+        return self.__class__.__name__ + ' (' \
+               + str(self.in_features) + ' -> ' \
+               + str(self.out_features) + ')'
+
+
 class LinkPredictionPrompt(nn.Module):
-    def __init__(self, num_pnodes, emb_dim, h_dim, out_dim) -> None:
-        super(PromptGraph, self).__init__()
-        self.p_layer1 = nn.Linear(emb_dim, h_dim)
-        self.bn = nn.BatchNorm1d(h_dim)
-        self.p_layer2 = nn.Linear(h_dim, out_dim)
-        nn.init.kaiming_uniform_(self.p_layer1.weight)
-        nn.init.kaiming_uniform_(self.p_layer2.weight)
+    def __init__(self,
+                 emb_dim,
+                 h_dim,
+                 output_dim,
+                 num_layers=2,
+                 normalize=False,
+                 has_head=True,
+                 device="cuda:0") -> None:
+        super(LinkPredictionPrompt, self).__init__()
+        self.device = torch.device(device)
+        self.gnn1 = GCNConv(emb_dim, h_dim)
+        self.bn1 = nn.BatchNorm1d(h_dim)
+        self.gnn2 = GCNConv(h_dim, h_dim)
+        self.bn2 = nn.BatchNorm1d(h_dim)
+        self.head = nn.Linear(h_dim, output_dim)
 
     def simmatToadj(self, adjacency_matrix):
         adjacency_matrix = adjacency_matrix.triu(diagonal=1)
@@ -90,54 +123,31 @@ class LinkPredictionPrompt(nn.Module):
             dim=0)
         return adj_list, edge_weights
 
-    def align_adj_weight(self, graph, adj_list, edge_weights):
-        edges = graph.edge_index
-        org_weights = torch.ones((edges.size(1),), dtype=torch.float)
-        new_edges = torch.cat((edges, adj_list), dim=1)
-        org_weights = org_weights.to(self.p_layer1.weight.device)
-        new_weights = torch.cat((org_weights, edge_weights), dim=0)
-        old_ones = org_weights[org_weights==1].sum()
-        new_edges = new_edges.T
-        aug_edges = new_edges.select(1, 0) * (graph.x.size(0)+1) + new_edges.select(1, 1)
-        s_idxs = aug_edges.sort(stable=True).indices
-        new_edges = new_edges.index_select(0, s_idxs).T
-        new_weights = new_weights[s_idxs]
-        new_ones = new_weights[new_weights==1].sum()
-        # before_dict = {}
-        # for i in range(new_edges.size(1)):
-        #     if (new_edges[0, i].item(), new_edges[1, i].item()) not in before_dict:
-        #         before_dict[(new_edges[0, i].item(), new_edges[1, i].item())] = new_weights[i].item()
-        #     else:
-        #         print("this edge was duplicated: ", (new_edges[0, i].item(), new_edges[1, i].item()), new_weights[i].item())
-        unique_edges, inverse, counts = new_edges.unique(dim=1, sorted=True, return_inverse=True, return_counts=True)
-        unique_counts = counts.cumsum(dim=0).roll(1, dims=0)
-        unique_counts[0] = 0
-        new_weights = new_weights[unique_counts]
-        new_ones = new_weights[new_weights==1].sum()
-        # if old_ones.item() != new_ones.item():
-        #     print(old_ones.item(), new_ones.item())
-        #     raise ValueError('Oooooooops tar.')
-        # after_dict = {}
-        # for i in range(unique_edges.size(1)):
-        #     if (unique_edges[0, i].item(), unique_edges[1, i].item()) not in after_dict:
-        #         after_dict[(unique_edges[0, i].item(), unique_edges[1, i].item())] = new_weights[i].item()
-        # for e in graph.edge_index.T:
-        #     if after_dict[(e[0].item(), e[1].item())] != 1:
-        #         print("this is bug: ", (e[0].item(), e[1].item()), after_dict[(e[0].item(), e[1].item())])
-        #         raise ValueError('Ooooooopsss!')
-        graph.edge_index = unique_edges
-        graph.edge_attr = new_weights
-        return graph
+    def forward_gnn(self, graph):
+        emb_out = graph.x.squeeze()
+        # print("second graph edge_index, graph edge_attr: ", graph.edge_index.size(), graph.edge_attr.size())
+        emb_out = self.gnn1(emb_out, graph.edge_index)
+        emb_out = F.relu(emb_out)
+        emb_out = self.gnn2(emb_out, graph.edge_index)
+        return emb_out
 
     def forward(self, graphs):
+        x_adj_list = []
         for graph in graphs:
-            cnum_nodes = graph.x.size(0)
-            emb_out = self.p_layer1(graph.x)
-            emb_out = self.bn(emb_out)
-            emb_out = F.dropout(F.relu(emb_out), p=0.1, training=self.training)
-            emb_out = self.p_layer2(emb_out)
+            org_adj_mat = to_dense_adj(
+                graph.edge_index,
+                max_num_nodes=graph.x.size(0)
+                ).squeeze()
+            emb_out = self.forward_gnn(graph)
             adj_scores = emb_out @ emb_out.T
-            adj_matrix = F.sigmoid(adj_scores)
-            adj_list, weights = self.simmatToadj(adj_matrix)
-            _ = self.align_adj_weight(graph, adj_list, weights)
-        return graphs
+            pred_adj_mat = F.sigmoid(adj_scores)
+            # print("pred_adj_mat: ", pred_adj_mat)
+            pred_adj_mat = pred_adj_mat.masked_fill(org_adj_mat.bool(), 1.)
+            pred_adj_mat = pred_adj_mat.where(pred_adj_mat >= 0.5, 0.)
+            deg_mat = pred_adj_mat.sum(dim=1)
+            deg_mat_inv = torch.max(deg_mat, torch.ones_like(deg_mat)*1e-6).pow(-1)
+            pred_adj_mat = deg_mat_inv.diag() @ pred_adj_mat
+            pred_adj_mat.fill_diagonal_(1.)
+            pred_adj_mat = dense_to_sparse(pred_adj_mat)
+            x_adj_list.append((graph.x, pred_adj_mat))
+        return x_adj_list
