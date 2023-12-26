@@ -90,16 +90,6 @@ def normalize_(input_tensor, dim=0, mode="max"):
         input_tensor.sub_(mean).div_(std)
     return input_tensor
 
-def dense_to_sparse(spmat):
-    indices = spmat.nonzero(as_tuple=False)
-    spmat = torch.sparse_coo_tensor(
-        indices.T,
-        spmat[indices[:, 0], indices[:, 1]],
-        size=spmat.size(),
-        requires_grad=True
-        )
-    return spmat
-
 def load_model(cmodel, pmodel=None, read_checkpoint=True, pretrained_path=None):
     if read_checkpoint and pretrained_path is not None:
         pretrained_dict = torch.load(pretrained_path)["model_state_dict"]

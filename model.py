@@ -9,12 +9,12 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from typing import List
 from torch_geometric.data import Data
-from torch_geometric.utils import augmentation
 from torch_geometric.nn import GATConv, GCNConv
+from torch_geometric.utils import to_dense_adj
 from torch_geometric.datasets import QM9, TUDataset
 from torch_geometric.loader import DataLoader
 from torch_geometric.nn import global_mean_pool
-from utils import simmatToadj
+from utils import simmatToadj, dense_to_sparse
 
 
 class PromptGraph(nn.Module):
