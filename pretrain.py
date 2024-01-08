@@ -67,13 +67,12 @@ for epoch in range(n_epochs):
         x_adj_list = batch_to_xadj_list(train_batch, device)
         optimizer.zero_grad()
         emb_out, _ = model(x_adj_list)
-        loss = obj_fun(emb_out, train_batch.y)
+        loss = obj_fun(emb_out, train_batch.y.to(device))
         loss.backward()
         optimizer.step()
     scheduler.step()
     test_loss, test_acc = test(
         model, test_dataset, len(test_dataset), device, epoch, visualize, colors)
-    model.to(device)
     print(f'Epoch: {epoch}/{n_epochs}, Train Loss: {loss:.4f}, Main Loss: {test_loss:.4f}, Main ACC: {test_acc:.3f}')
 
 save_model = True

@@ -108,7 +108,7 @@ for epoch in range(n_epochs):
         labels = [g.y for g in test_dataset]
         p_x_adj = pmodel(g_list)
         test_loss, test_acc = test_prompt(
-            main_model, p_x_adj, torch.as_tensor(labels), epoch, visualize, colors)
+            main_model, p_x_adj, torch.as_tensor(labels).to(device), epoch, visualize, colors)
         print(f'Main Loss: {test_loss:.4f}, Main ACC: {test_acc:.3f}', "#"*100)
 
     pmodel.train()

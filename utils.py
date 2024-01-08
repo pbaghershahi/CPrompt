@@ -76,13 +76,14 @@ def test(model, dataset, batch_size, device, epoch=None, visualize=False, colors
         out, embeds = model(x_adj_list)
         if visualize:
             visualize_and_save_tsne(
-                embeds.detach().numpy(), 
-                colors[test_batch.y] if colors is not None else None, 
+                embeds.cpu().detach().numpy(), 
+                colors[test_batch.y.cpu()] if colors is not None else None, 
                 epoch if epoch is not None else 0)
-        test_loss += F.cross_entropy(out, test_batch.y, reduction="sum")
+        labels = test_batch.y.to(device)
+        test_loss += F.cross_entropy(out, labels, reduction="sum")
         out = F.softmax(out, dim=1)
         pred = out.max(dim=1)[1]
-        correct += int((pred == test_batch.y).sum())
+        correct += int((pred == labels).sum())
     test_loss /= len(dataset)
     test_acc = correct / len(dataset)
     return test_loss, test_acc
@@ -91,8 +92,8 @@ def test_prompt(model, x_adj_batch, labels, epoch=None, visualize=False, colors=
     test_out, embeds = model(x_adj_batch)
     if visualize:
         visualize_and_save_tsne(
-            embeds.detach().numpy(), 
-            colors[labels] if colors is not None else None, 
+            embeds.cpu().detach().numpy(), 
+            colors[labels.cpu()] if colors is not None else None, 
             epoch if epoch is not None else 0)
     test_loss = F.cross_entropy(test_out, labels, reduction="mean")
     test_out = F.softmax(test_out, dim=1)
