@@ -7,6 +7,7 @@ from torch.optim.lr_scheduler import StepLR
 import numpy as np
 from torch_geometric.loader import DataLoader
 import matplotlib.pyplot as plt
+from sklearn.manifold import TSNE
 import pandas as pd
 from typing import List
 from torch_geometric.utils import to_torch_coo_tensor, to_dense_adj
@@ -20,8 +21,7 @@ def multiclass_marginal_loss(T1, T2, margin):
     T2 = T2.tile(1, exp_dims[0], 1)
     dists = (T1 - T2).norm(p=2, dim=2)
     pos_dists = dists.diagonal()
-    neg_dists = ((margin - dists * torch.ones_like(dists)).fill_diagonal_(0.))
-    # neg_dists = torch.max(neg_dists, torch.zeros_like(neg_dists)).sum(dim=1)
+    neg_dists = ((margin - dists).fill_diagonal_(0.))
     neg_dists = torch.max(neg_dists, torch.zeros_like(neg_dists))
     # print("neg_dists: ", neg_dists)
     neg_dists = neg_dists.mean(dim=1)
@@ -52,13 +52,33 @@ def batch_to_xadj_list(g_batch, device):
         x_adj_list.append((x, adj_sparse))
     return x_adj_list
 
-def test(model, dataset, batch_size, device):
+def visualize_and_save_tsne(features_tensor, colors, epoch, save_dir='feature_plots'):
+    os.makedirs(save_dir, exist_ok=True)
+    if len(features_tensor.shape) != 2:
+        raise ValueError("Input tensor should be 2D (batch_size x feature_dim)")
+    tsne = TSNE(n_components=2, random_state=42)
+    features_2d = tsne.fit_transform(features_tensor)
+    plt.figure()
+    plt.scatter(features_2d[:, 0], features_2d[:, 1], c=colors)
+    plt.xlabel('t-SNE Component 1')
+    plt.ylabel('t-SNE Component 2')
+    plt.title('t-SNE Visualization of Feature Vectors')
+    save_path = os.path.join(save_dir, f'tsne_plot_{epoch}.png')
+    plt.savefig(save_path)
+    plt.close()
+
+def test(model, dataset, batch_size, device, epoch=None, visualize=False, colors=None):
     model.eval()
     test_loss, correct = 0, 0
     for i in range(0, len(dataset), batch_size):
         test_batch = dataset[i:min(i+batch_size, len(dataset))]
         x_adj_list = batch_to_xadj_list(test_batch, device)
-        out = model(x_adj_list)
+        out, embeds = model(x_adj_list)
+        if visualize:
+            visualize_and_save_tsne(
+                embeds.detach().numpy(), 
+                colors[test_batch.y] if colors is not None else None, 
+                epoch if epoch is not None else 0)
         test_loss += F.cross_entropy(out, test_batch.y, reduction="sum")
         out = F.softmax(out, dim=1)
         pred = out.max(dim=1)[1]
@@ -67,8 +87,13 @@ def test(model, dataset, batch_size, device):
     test_acc = correct / len(dataset)
     return test_loss, test_acc
 
-def test_prompt(model, x_adj_batch, labels):
-    test_out = model(x_adj_batch)
+def test_prompt(model, x_adj_batch, labels, epoch=None, visualize=False, colors=None):
+    test_out, embeds = model(x_adj_batch)
+    if visualize:
+        visualize_and_save_tsne(
+            embeds.detach().numpy(), 
+            colors[labels] if colors is not None else None, 
+            epoch if epoch is not None else 0)
     test_loss = F.cross_entropy(test_out, labels, reduction="mean")
     test_out = F.softmax(test_out, dim=1)
     test_pred = test_out.max(dim=1)[1]

@@ -16,6 +16,7 @@ from torch_geometric.datasets import QM9, TUDataset
 from torch_geometric.loader import DataLoader, DenseDataLoader
 from torch_geometric.nn import global_mean_pool
 from utils import *
+import random
 from model import GCN, LinkPredictionPrompt
 from copy import deepcopy
 
@@ -35,7 +36,7 @@ dataset = TUDataset(
 for g in dataset:
     g.x = normalize_(g.x, mode="max")
 
-torch.manual_seed(432)
+torch.manual_seed(2411)
 dataset = dataset.shuffle()
 
 n_train = int(len(dataset)*0.9)
@@ -78,7 +79,13 @@ temperature = 1
 n_drops = 0.15
 batch_size = 16
 n_augs = 2
-n_prom = n_augs//2
+visualize = True
+if visualize:
+    colors = np.array([
+        "#"+''.join([random.choice('0123456789ABCDEF') for j in range(6)]) \
+        for i in range(dataset.y.unique().size(0))])
+else:
+    colors = None
 
 aug_graphs = []
 losses = []
@@ -89,8 +96,9 @@ main_model.eval()
 
 with torch.no_grad():
     main_model.eval()
-    test_loss, test_acc = test(main_model, test_dataset, len(test_dataset), device)
-    print(f'Main Loss: {test_loss:.4f}, Main ACC: {test_acc:.3f}')
+    test_loss, test_acc = test(
+        main_model, test_dataset, len(test_dataset), device, -1, visualize, colors)
+    print(f'Main Loss on Pretrained GNN: {test_loss:.4f}, Main ACC: {test_acc:.3f}')
 
 for epoch in range(n_epochs):
     with torch.no_grad():
@@ -99,7 +107,8 @@ for epoch in range(n_epochs):
         g_list = [g.to(device) for g in test_dataset]
         labels = [g.y for g in test_dataset]
         p_x_adj = pmodel(g_list)
-        test_loss, test_acc = test_prompt(main_model, p_x_adj, torch.as_tensor(labels))
+        test_loss, test_acc = test_prompt(
+            main_model, p_x_adj, torch.as_tensor(labels), epoch, visualize, colors)
         print(f'Main Loss: {test_loss:.4f}, Main ACC: {test_acc:.3f}', "#"*100)
 
     pmodel.train()
@@ -118,10 +127,10 @@ for epoch in range(n_epochs):
         p_x_adj = pmodel(prompt_graphs)
         g_x_adj = batch_to_xadj_list(gbatch_list, device)
         # print(g_batch.y)
-        emb_out1 = enc_model(p_x_adj)
-        emb_out2 = enc_model(g_x_adj)
+        emb_out1, _ = enc_model(p_x_adj)
+        emb_out2, _ = enc_model(g_x_adj)
         # loss = contrastive_loss(emb_out1, emb_out2, temperature, device) + 0.5 * adj_loss
-        loss = multiclass_marginal_loss(emb_out1, emb_out2, 10)
+        loss = multiclass_marginal_loss(emb_out1, emb_out2, 1)
         # print("loss: ", loss.item())
         loss.backward()
         # total_norm = 0

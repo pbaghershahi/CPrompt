@@ -10,6 +10,7 @@ from torch_geometric.datasets import TUDataset
 from torch_geometric.loader import DataLoader
 from model import GCN
 from utils import *
+import random
 from torch_geometric.utils import to_torch_coo_tensor
 
 
@@ -27,7 +28,7 @@ dataset = TUDataset(
 for g in dataset:
     g.x = normalize_(g.x, mode="max")
 
-torch.manual_seed(432)
+torch.manual_seed(2411)
 dataset = dataset.shuffle()
 
 n_train = int(len(dataset)*0.9)
@@ -39,8 +40,14 @@ test_loader = DataLoader(test_dataset, batch_size=64, shuffle=False)
 
 h_dim = 64
 n_layers = 2
-n_pnodes = 100
 batch_size = 64
+visualize = True
+if visualize:
+    colors = np.array([
+        "#"+''.join([random.choice('0123456789ABCDEF') for j in range(6)]) \
+        for i in range(dataset.y.unique().size(0))])
+else:
+    colors = None
 
 model = GCN(dataset.x.size(1), h_dim, nclass=dataset.num_classes, dropout=0.2)
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -48,9 +55,10 @@ model.to(device)
 for d in train_loader:
     d.to(device)
 obj_fun = nn.CrossEntropyLoss()
-optimizer = torch.optim.Adam(model.parameters(), lr=1e-2)
+optimizer = Adam(model.parameters(), lr=1e-2)
+scheduler = StepLR(optimizer, step_size=100, gamma=0.5)
 
-n_epochs = 200
+n_epochs = 300
 for epoch in range(n_epochs):
     model.train()
     train_dataset = train_dataset.shuffle()
@@ -58,15 +66,15 @@ for epoch in range(n_epochs):
         train_batch = train_dataset[i:min(i+batch_size, len(train_dataset))]
         x_adj_list = batch_to_xadj_list(train_batch, device)
         optimizer.zero_grad()
-        emb_out = model(x_adj_list)
-        # print(emb_out, "#"*100)
+        emb_out, _ = model(x_adj_list)
         loss = obj_fun(emb_out, train_batch.y)
-        # print(loss)
         loss.backward()
         optimizer.step()
-    test_loss, test_acc = test(model, test_dataset, len(test_dataset), device)
+    scheduler.step()
+    test_loss, test_acc = test(
+        model, test_dataset, len(test_dataset), device, epoch, visualize, colors)
     model.to(device)
-    print(f'Train Loss: {loss:.4f}, Main Loss: {test_loss:.4f}, Main ACC: {test_acc:.3f}')
+    print(f'Epoch: {epoch}/{n_epochs}, Train Loss: {loss:.4f}, Main Loss: {test_loss:.4f}, Main ACC: {test_acc:.3f}')
 
 save_model = True
 if save_model:

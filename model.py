@@ -44,20 +44,26 @@ class GCN(nn.Module):
         super(GCN, self).__init__()
         self.gc1 = GraphConvolution(nfeat, nhid)
         self.gc2 = GraphConvolution(nhid, nhid)
+        self.bn1 = nn.BatchNorm1d(nhid)
+        self.bn2 = nn.BatchNorm1d(nhid)
         self.head = nn.Linear(nhid, nclass)
         self.dropout = dropout
 
     def forward(self, x_adj_list):
         g_embeds = []
         for i, (x, adj) in enumerate(x_adj_list):
-            x = F.relu(self.gc1(x, adj))
+            x = self.gc1(x, adj)
+            # x = self.bn1(x)
+            x = F.relu(x)
             x = F.dropout(x, self.dropout, training=self.training)
-            # x = self.gc2(x, adj)
-            g_embeds.append(x.mean(dim=0))
-            # return F.log_softmax(x, dim=1)
+            x = self.gc2(x, adj)
+            # x = self.bn2(x)
+            x = F.relu(x)
+            x = F.dropout(x, self.dropout, training=self.training)
+            g_embeds.append(x.max(dim=0).values)
         g_ambeds = torch.stack(g_embeds)
         scores = self.head(g_ambeds)
-        return scores
+        return scores, g_ambeds
 
 
 class GraphConvolution(nn.Module):
@@ -84,7 +90,6 @@ class GraphConvolution(nn.Module):
 
     def forward(self, input_x, adj):
         support = torch.mm(input_x, self.weight)
-        # print("self.weight: ", self.weight)
         output = torch.spmm(adj, support)
         if self.bias is not None:
             return output + self.bias
@@ -112,6 +117,7 @@ class LinkPredictionPrompt(nn.Module):
         self.bn1 = nn.BatchNorm1d(h_dim)
         self.gnn2 = GCNConv(h_dim, h_dim)
         self.bn2 = nn.BatchNorm1d(h_dim)
+        self.dropout = 0.2
         self.head = nn.Linear(h_dim, output_dim)
 
     def simmatToadj(self, adjacency_matrix):
@@ -125,9 +131,10 @@ class LinkPredictionPrompt(nn.Module):
 
     def forward_gnn(self, graph):
         emb_out = graph.x.squeeze()
-        # print("second graph edge_index, graph edge_attr: ", graph.edge_index.size(), graph.edge_attr.size())
         emb_out = self.gnn1(emb_out, graph.edge_index)
+        # emb_out = self.bn1(emb_out)
         emb_out = F.relu(emb_out)
+        emb_out = F.dropout(emb_out, self.dropout, training=self.training)
         emb_out = self.gnn2(emb_out, graph.edge_index)
         return emb_out
 
