@@ -1,6 +1,7 @@
 #!/bin/bash
 
 pytorch_version=$(python -c "import torch; print(f'torch-{torch.__version__}.html')")
+pip install --no-index pyg_lib -f https://pytorch-geometric.com/whl/$pytorch_version
 pip install --no-index torch-scatter -f https://pytorch-geometric.com/whl/$pytorch_version
 pip install --no-index torch-sparse -f https://pytorch-geometric.com/whl/$pytorch_version
 pip install --no-index torch-cluster -f https://pytorch-geometric.com/whl/$pytorch_version
