@@ -60,10 +60,11 @@ class GCN(nn.Module):
             # x = self.bn2(x)
             x = F.relu(x)
             x = F.dropout(x, self.dropout, training=self.training)
-            g_embeds.append(x.max(dim=0).values)
-        g_ambeds = torch.stack(g_embeds)
-        scores = self.head(g_ambeds)
-        return scores, g_ambeds
+            g_embeds.append(x.mean(dim=0))
+            # g_embeds.append(x.max(dim=0).values)
+        g_embeds = torch.stack(g_embeds)
+        scores = self.head(g_embeds)
+        return scores, g_embeds
 
 
 class GraphConvolution(nn.Module):

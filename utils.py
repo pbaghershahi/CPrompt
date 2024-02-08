@@ -42,14 +42,14 @@ def batch_to_xadj_list(g_batch, device):
     x_adj_list = []
     for i, g in enumerate(g_batch):
         g = g.to(device)
-        x = g.x
-        adj_dense = to_dense_adj(g.edge_index, max_num_nodes=x.size(0)).squeeze()
+        adj_dense = to_dense_adj(g.edge_index, max_num_nodes=g.x.size(0)).squeeze()
         deg_mat = adj_dense.sum(dim=1)
         deg_mat_inv = torch.max(deg_mat, torch.ones_like(deg_mat)*1e-6).pow(-1)
-        adj_dense = deg_mat_inv.diag() @ adj_dense
+        deg_mat_inv = deg_mat_inv.diag()
+        adj_dense = deg_mat_inv @ adj_dense
         adj_dense.fill_diagonal_(1.)
         adj_sparse = dense_to_sparse(adj_dense)
-        x_adj_list.append((x, adj_sparse))
+        x_adj_list.append((g.x, adj_sparse))
     return x_adj_list
 
 def visualize_and_save_tsne(features_tensor, colors, epoch, save_dir='feature_plots'):
@@ -70,22 +70,22 @@ def visualize_and_save_tsne(features_tensor, colors, epoch, save_dir='feature_pl
 def test(model, dataset, batch_size, device, epoch=None, visualize=False, colors=None):
     model.eval()
     test_loss, correct = 0, 0
-    for i in range(0, len(dataset), batch_size):
-        test_batch = dataset[i:min(i+batch_size, len(dataset))]
+    for i in range(dataset.test_idx, dataset.n_nodes, batch_size):
+        print(f"Test batch: {i}/{node_ds.test_idx}", end='\r')
+        test_batch, test_labels = dataset[i:min(i+batch_size, dataset.n_nodes)]
         x_adj_list = batch_to_xadj_list(test_batch, device)
         out, embeds = model(x_adj_list)
         if visualize:
             visualize_and_save_tsne(
-                embeds.cpu().detach().numpy(), 
-                colors[test_batch.y.cpu()] if colors is not None else None, 
+                embeds.cpu().detach().numpy(),
+                colors[test_labels.cpu()] if colors is not None else None,
                 epoch if epoch is not None else 0)
-        labels = test_batch.y.to(device)
-        test_loss += F.cross_entropy(out, labels, reduction="sum")
+        test_loss += F.cross_entropy(out, test_labels.to(device), reduction="sum")
         out = F.softmax(out, dim=1)
         pred = out.max(dim=1)[1]
-        correct += int((pred == labels).sum())
-    test_loss /= len(dataset)
-    test_acc = correct / len(dataset)
+        correct += int((pred == test_labels.to(device)).sum())
+    test_loss /= dataset.n_test
+    test_acc = correct / dataset.n_test
     return test_loss, test_acc
 
 def test_prompt(model, x_adj_batch, labels, epoch=None, visualize=False, colors=None):
