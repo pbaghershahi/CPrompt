@@ -1,59 +1,41 @@
-import torch, os
+import torch, os, random
 import torch.nn as nn
 import torch.nn.functional as F
-from datetime import datetime
-from torch.optim import Adam
-from torch.optim.lr_scheduler import StepLR
 import numpy as np
 import matplotlib.pyplot as plt
-import pandas as pd
-from typing import List
-from torch_geometric.data import Data, Batch
-from torchvision.transforms.functional import normalize
-from torch_geometric.utils import augmentation, to_dense_adj
-from torch_geometric.nn import GAT, GATConv, GCNConv
-from torch_geometric.datasets import QM9, TUDataset
-from torch_geometric.loader import DataLoader, DenseDataLoader
-from torch_geometric.nn import global_mean_pool
-from utils import *
-import random
+from torch_geometric.data import Data
 from model import GCN, LinkPredictionPrompt
 from copy import deepcopy
+from data_utils import make_datasets
+from utils import *
 
-# dataset = TUDataset(root='data/TUDataset', name='PROTEINS_full', use_node_attr=True)
-# graph_data = TUDataset(root='data/TUDataset', name='MUTAG')
-dataset = TUDataset(
-    root='data/TUDataset',
-    name='ENZYMES',
-    use_node_attr=True
-    )
-# dataset = TUDataset(
-#     root='data/TUDataset',
-#     name='PROTEINS_full',
-#     use_node_attr=True
-#     )
 
-for g in dataset:
-    g.x = normalize_(g.x, mode="max")
-
-torch.manual_seed(2411)
-dataset = dataset.shuffle()
-
-n_train = int(len(dataset)*0.9)
-train_dataset = dataset[:n_train]
-test_dataset = dataset[n_train:]
+s_dataset, t_dataset = make_datasets(
+        num_nsamples = 1000,
+        num_nclass = 7,
+        num_gclass = 5,
+        n_feats = 32,
+        ng_perclass = 100,
+        nn_perclass = (50, 100),
+        nlabel_perm = 0.5,
+        graph_selec_noise = 0.5,
+        cov_scale = 2,
+        train_per = 0.85,
+        test_per = 0.15,
+        norm_mode = "max",
+        visualize = False
+)
 
 h_dim = 64
 ph_dim = 64
 o_dim = 64
 n_layers = 2
-
-enc_model = GCN(dataset.x.size(1), h_dim, nclass=dataset.num_classes, dropout=0.2)
-main_model = GCN(dataset.x.size(1), h_dim, nclass=dataset.num_classes, dropout=0.2)
+enc_model = GCN(t_dataset.n_feats, h_dim, nclass=t_dataset.num_gclass, dropout=0.2)
+main_model = GCN(t_dataset.n_feats, h_dim, nclass=t_dataset.num_gclass, dropout=0.2)
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 pmodel = LinkPredictionPrompt(
-    dataset.x.size(1),
-    h_dim, o_dim,
+    t_dataset.n_feats,
+    h_dim, t_dataset.n_feats,
     num_layers=2,
     normalize=True,
     has_head=False,
@@ -73,21 +55,20 @@ for param in enc_model.parameters():
 for param in main_model.parameters():
     param.requires_grad = False
 
-
 n_epochs = 256
 temperature = 1
 n_drops = 0.15
-batch_size = 16
+batch_size = 32
 n_augs = 2
-visualize = True
+visualize = False
 if visualize:
     colors = np.array([
         "#"+''.join([random.choice('0123456789ABCDEF') for j in range(6)]) \
-        for i in range(dataset.y.unique().size(0))])
+        for i in range(s_dataset.y.unique().size(0))])
 else:
     colors = None
 
-aug_graphs = []
+ug_graphs = []
 losses = []
 main_losses = []
 main_accs = []
@@ -97,49 +78,60 @@ main_model.eval()
 with torch.no_grad():
     main_model.eval()
     test_loss, test_acc = test(
-        main_model, test_dataset, len(test_dataset), device, -1, visualize, colors)
+        main_model, s_dataset, 32, device, -1, visualize, colors, "main")
+    print(f'Main Loss on Pretrained GNN: {test_loss:.4f}, Main ACC: {test_acc:.3f}')
+
+with torch.no_grad():
+    main_model.eval()
+    test_loss, test_acc = test(
+        main_model, t_dataset, 32, device, -1, visualize, colors, "main")
     print(f'Main Loss on Pretrained GNN: {test_loss:.4f}, Main ACC: {test_acc:.3f}')
 
 for epoch in range(n_epochs):
     with torch.no_grad():
         pmodel.eval()
         main_model.eval()
-        g_list = [g.to(device) for g in test_dataset]
-        labels = [g.y for g in test_dataset]
-        p_x_adj = pmodel(g_list)
-        test_loss, test_acc = test_prompt(
-            main_model, p_x_adj, torch.as_tensor(labels).to(device), epoch, visualize, colors)
+        test_loss, test_acc = test(
+            main_model, t_dataset, 32, device, -1, visualize, colors, "prompt")
         print(f'Main Loss: {test_loss:.4f}, Main ACC: {test_acc:.3f}', "#"*100)
 
     pmodel.train()
+    main_model.eval()
     total_loss = 0
     counter = 0
-    optimizer.zero_grad()
-    train_dataset = train_dataset.shuffle()
-    for i in range(0, len(train_dataset), batch_size):
-        gbatch_list = []
-        for j in range(i, min(i+batch_size, len(train_dataset))):
-            g = train_dataset[j].to(device)
-            gbatch_list.append(g)
-        # pbatch_gt = glist_to_gbatch(gbatch_list)
-        # pbatch_gt = to_dense_adj(pbatch_gt.edge_index, pbatch_gt.batch)
-        prompt_graphs = [drop_edges(deepcopy(g), n_drops) for g in gbatch_list]
-        p_x_adj = pmodel(prompt_graphs)
-        g_x_adj = batch_to_xadj_list(gbatch_list, device)
-        # print(g_batch.y)
-        emb_out1, _ = enc_model(p_x_adj)
-        emb_out2, _ = enc_model(g_x_adj)
-        # loss = contrastive_loss(emb_out1, emb_out2, temperature, device) + 0.5 * adj_loss
-        loss = multiclass_marginal_loss(emb_out1, emb_out2, 1)
-        # print("loss: ", loss.item())
-        loss.backward()
-        # total_norm = 0
-        # for name, p in pmodel.named_parameters():
-        #     if p.grad is not None and p.requires_grad:
-        #         # print("temp norm: ", name, p.grad)
-        #         param_norm = p.grad.data.norm(2)
-        #         total_norm += param_norm.item() ** 2
-        # total_norm = total_norm ** (1. / 2)
-        # print(loss, total_norm)
-        optimizer.step()
+    x_mean = 0
+    counter = 0
+    for i, batch in enumerate(t_dataset.train_loader):
         optimizer.zero_grad()
+        # print(f"Train batch: {i}/{t_dataset.train_idx}")
+        batch = batch.to_data_list()
+        prompt_batch = [
+            aug_graph(Data(x=g.x, edge_index=g.edge_index, y=g.y), n_drops, mode="drop").to(device)
+            for g in batch
+        ]
+        pos_batch = [
+            aug_graph(Data(x=g.x, edge_index=g.edge_index, y=g.y), n_drops, mode="drop").to(device)
+            for g in batch
+        ]
+        neg_batch = [
+            aug_graph(Data(x=g.x, edge_index=g.edge_index, y=g.y), n_drops, mode="add").to(device)
+            for g in batch
+        ]
+        prompt_batch = pmodel(prompt_batch)
+
+        prompt_x_adj = batch_to_xadj_list(prompt_batch, device)
+        pos_x_adj = batch_to_xadj_list(pos_batch, device)
+        neg_x_adj = batch_to_xadj_list(neg_batch, device)
+        prompt_out, _ = main_model(prompt_x_adj)
+        pos_out, _ = main_model(pos_x_adj)
+        neg_out, _ = main_model(neg_x_adj)
+        # loss = multiclass_triplet_loss(prompt_out, pos_out, neg_out, 1)
+        loss = ntxent_loss(prompt_out, pos_out, neg_out)
+        loss.backward()
+        optimizer.step()
+        # total_grad_norm = 0
+        # for name, param in pmodel.named_parameters():
+        #     if param.requires_grad:
+        #         if param.grad is not None:
+        #             total_grad_norm += param.grad.norm()
+        # print("Gradients norm: ", total_grad_norm.item())

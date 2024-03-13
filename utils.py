@@ -1,32 +1,94 @@
-import torch, os
-import torch.nn as nn
+import torch, random, os
 import torch.nn.functional as F
-from datetime import datetime
-from torch.optim import Adam
-from torch.optim.lr_scheduler import StepLR
 import numpy as np
-from torch_geometric.loader import DataLoader
 import matplotlib.pyplot as plt
 from sklearn.manifold import TSNE
-import pandas as pd
-from typing import List
-from torch_geometric.utils import to_torch_coo_tensor, to_dense_adj
+from torch_geometric.utils import to_dense_adj, subgraph, remove_self_loops, coalesce
+from torch_geometric.data import Data
+from torch_geometric.loader import DataLoader
 
 
-def multiclass_marginal_loss(T1, T2, margin):
-    exp_dims = (T1.size(0), T2.size(0))
-    T1 = T1.unsqueeze(0)
-    T2 = T2.unsqueeze(1)
-    T1 = T1.tile(exp_dims[1], 1, 1)
-    T2 = T2.tile(1, exp_dims[0], 1)
-    dists = (T1 - T2).norm(p=2, dim=2)
-    pos_dists = dists.diagonal()
-    neg_dists = ((margin - dists).fill_diagonal_(0.))
+def multiclass_triplet_loss(prompt, pos, neg, margin):
+    exp_dims = (prompt.size(0), pos.size(0))
+    prompt = prompt.unsqueeze(0)
+    pos = pos.unsqueeze(1)
+    prompt = prompt.tile(exp_dims[1], 1, 1)
+    pos = pos.tile(1, exp_dims[0], 1)
+    pos_dists = (prompt - pos).norm(p=2, dim=2).T
+    pos_dists = pos_dists.diagonal()
+    neg = neg.unsqueeze(1)
+    neg = neg.tile(1, exp_dims[1], 1)
+    neg_dists = (prompt - neg).norm(p=2, dim=2).T
+    neg_dists = ((margin - neg_dists).fill_diagonal_(0.))
     neg_dists = torch.max(neg_dists, torch.zeros_like(neg_dists))
-    # print("neg_dists: ", neg_dists)
     neg_dists = neg_dists.mean(dim=1)
+    # print("Mean of the positive samples: ", pos_dists.mean().item(), "Mean of negative samples: ", neg_dists.mean().item())
     loss = (pos_dists + neg_dists).mean()
     return loss
+
+def ntxent_loss(prompt_score, pos_score, neg_score):
+    pr_norm = prompt_score.norm(p=2, dim=1)
+    pr_norm = torch.max(pr_norm, torch.ones_like(pr_norm)*1e-8)
+    p_norm = pos_score.norm(p=2, dim=1)
+    p_norm = torch.max(p_norm, torch.ones_like(p_norm)*1e-8)
+    pos = (prompt_score * pos_score).sum(dim=1)/(pr_norm * p_norm)
+    n_norm = neg_score.norm(p=2, dim=1)
+    pr_norm = pr_norm[:, None].tile(1, pr_norm.size(0))
+    n_norm = torch.max(n_norm, torch.ones_like(n_norm)*1e-8)
+    n_norm = n_norm[None, :].tile(pr_norm.size(0), 1)
+    neg = (prompt_score @ neg_score.T) / (pr_norm * n_norm)
+    neg = torch.cat([neg, pos[:, None]], dim=1)
+    neg = torch.logsumexp(neg, dim=1)
+    loss = (-pos + neg).mean()
+    return loss
+
+def get_subgraph(graph, node_indices):
+    node_indices = np.sort(node_indices)
+    org_edges = subgraph(torch.as_tensor(node_indices), graph.edge_index)[0]
+    nodes_mapping = dict(zip(node_indices, np.arange(node_indices.shape[0])))
+    sub_edges = torch.empty_like(org_edges.view(-1))
+    sub_edges[:] = torch.tensor([nodes_mapping[val.item()] for val in org_edges.view(-1)])
+    sub_edges = sub_edges.view(2, -1)
+    sub_x = graph.x[node_indices]
+    sub_y = graph.y[node_indices]
+    sub_g = Data(x=sub_x, edge_index=sub_edges, y=sub_y)
+    return sub_g
+
+def aug_graph(org_graph, aug_prob, mode="drop"):
+    edges = org_graph.edge_index
+    n_edges = org_graph.edge_index.size(1)
+    n_changes = int(n_edges * aug_prob)
+    perm = torch.randperm(n_edges)[n_changes:]
+    new_edges = edges[:, perm]
+    if mode != "drop":
+        add_edges = torch.stack(
+            [torch.randint(org_graph.x.size(0), (n_changes,)),
+            torch.randint(org_graph.x.size(0), (n_changes,))]
+            )
+        new_edges = torch.cat([new_edges, add_edges], dim=1)
+        new_edges = remove_self_loops(coalesce(new_edges))[0]
+    org_graph.edge_index = new_edges
+    return org_graph
+
+def normalize_(input_tensor, dim=0, mode="max"):
+    if mode == "max":
+        max_value = input_tensor.max(dim=0).values
+        max_value[max_value==0] = 1.
+        input_tensor.div_(max_value)
+    else:
+        mean = input_tensor.mean(dim=dim)
+        std = input_tensor.std(dim=dim)
+        std = torch.max(std, torch.ones_like(std)*1e-12)
+        input_tensor.sub_(mean).div_(std)
+    return input_tensor
+
+def add_multivariate_noise(input_feats, mean, cov_matrix, inplace=True):
+    n_samples, n_feats = input_feats.numpy().shape
+    noise = np.random.multivariate_normal(mean, cov_matrix, n_samples)
+    noise = torch.as_tensor(noise, dtype=torch.float32)
+    if inplace:
+        return input_feats.add_(noise)
+    return input_feats + noise
 
 def dense_to_sparse(spmat):
     indices = spmat.nonzero(as_tuple=False)
@@ -67,54 +129,37 @@ def visualize_and_save_tsne(features_tensor, colors, epoch, save_dir='feature_pl
     plt.savefig(save_path)
     plt.close()
 
-def test(model, dataset, batch_size, device, epoch=None, visualize=False, colors=None):
+def test(
+        model, dataset, device, epoch=None, visualize=False,
+        colors=None, mode="prompt", pmodel=None):
     model.eval()
     test_loss, correct = 0, 0
-    for i in range(dataset.test_idx, dataset.n_nodes, batch_size):
-        print(f"Test batch: {i}/{node_ds.test_idx}", end='\r')
-        test_batch, test_labels = dataset[i:min(i+batch_size, dataset.n_nodes)]
-        x_adj_list = batch_to_xadj_list(test_batch, device)
-        out, embeds = model(x_adj_list)
+    for i, batch in enumerate(dataset.test_loader):
+        print("Test batch:", "@"*25, f"{i}/{len(dataset.test_loader)}", "@"*25, end='\r')
+        labels = batch.y.to(device)
+        batch = batch.to_data_list()
+        if mode == "prompt":
+            batch = [g.to(device) for g in batch]
+            batch = pmodel(batch)
+        x_adj_list = batch_to_xadj_list(batch, device)
+        test_out, embeds = model(x_adj_list)
         if visualize:
             visualize_and_save_tsne(
                 embeds.cpu().detach().numpy(),
-                colors[test_labels.cpu()] if colors is not None else None,
+                colors[labels.cpu()] if colors is not None else None,
                 epoch if epoch is not None else 0)
-        test_loss += F.cross_entropy(out, test_labels.to(device), reduction="sum")
-        out = F.softmax(out, dim=1)
-        pred = out.max(dim=1)[1]
-        correct += int((pred == test_labels.to(device)).sum())
+        test_loss += F.cross_entropy(test_out, labels, reduction="sum")
+        test_out = F.softmax(test_out, dim=1)
+        test_pred = test_out.max(dim=1)[1]
+        correct += int((test_pred == labels).sum())
+        batch, labels, x_adj_list, test_out, embeds = 0, 0, 0, 0, 0
     test_loss /= dataset.n_test
     test_acc = correct / dataset.n_test
-    return test_loss, test_acc
-
-def test_prompt(model, x_adj_batch, labels, epoch=None, visualize=False, colors=None):
-    test_out, embeds = model(x_adj_batch)
-    if visualize:
-        visualize_and_save_tsne(
-            embeds.cpu().detach().numpy(), 
-            colors[labels.cpu()] if colors is not None else None, 
-            epoch if epoch is not None else 0)
-    test_loss = F.cross_entropy(test_out, labels, reduction="mean")
-    test_out = F.softmax(test_out, dim=1)
-    test_pred = test_out.max(dim=1)[1]
-    test_acc = int((test_pred == labels).sum()) / len(x_adj_batch)
     return test_loss, test_acc
 
 def glist_to_gbatch(graph_list):
     g_loader = DataLoader(graph_list, batch_size=len(graph_list))
     return next(iter(g_loader))
-
-def normalize_(input_tensor, dim=0, mode="max"):
-    if mode == "max":
-        max_value = input_tensor.max(dim=0).values
-        input_tensor.div_(torch.max(max_value, torch.ones_like(max_value)*1e-6))
-    else:
-        mean = input_tensor.mean(dim=dim)
-        std = input_tensor.std(dim=dim)
-        std = torch.max(std, torch.ones_like(std)*1e-12)
-        input_tensor.sub_(mean).div_(std)
-    return input_tensor
 
 def load_model(cmodel, pmodel=None, read_checkpoint=True, pretrained_path=None):
     if read_checkpoint and pretrained_path is not None:
