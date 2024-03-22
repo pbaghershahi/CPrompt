@@ -7,40 +7,142 @@ from torch_geometric.utils import to_dense_adj, subgraph, remove_self_loops, coa
 from torch_geometric.data import Data
 from torch_geometric.loader import DataLoader
 
+def get_adj_labels(g_batch):
+    adj_matrices = []
+    for g in g_batch:
+        adj_mat = to_dense_adj(g.edge_index, max_num_nodes=g.x.size(0)).squeeze()
+        adj_matrices.append(adj_mat.view(-1))
+    adj_matrices = torch.cat(adj_matrices)
+    return adj_matrices
 
-def multiclass_triplet_loss(prompt, pos, neg, margin):
-    exp_dims = (prompt.size(0), pos.size(0))
-    prompt = prompt.unsqueeze(0)
-    pos = pos.unsqueeze(1)
-    prompt = prompt.tile(exp_dims[1], 1, 1)
-    pos = pos.tile(1, exp_dims[0], 1)
-    pos_dists = (prompt - pos).norm(p=2, dim=2).T
+def link_predict_loss(graphs, gt_adj_matrix):
+    all_scores = []
+    for g in graphs:
+        x = g.x
+        scores = x @ x.T
+        all_scores.append(F.sigmoid(scores).view(-1))
+    all_scores = torch.cat(all_scores).view(-1)
+    loss = F.binary_cross_entropy_with_logits(all_scores, gt_adj_matrix)
+    return loss
+
+def ntxent_loss(prompt_score, pos_score, neg_score, labels=None):
+    pr_norm = prompt_score.norm(p=2, dim=1)
+    pr_norm = torch.max(pr_norm, torch.ones_like(pr_norm)*1e-8)
+    p_norm = pos_score.norm(p=2, dim=1)
+    p_norm = torch.max(p_norm, torch.ones_like(p_norm)*1e-8)
+    pos = (prompt_score * pos_score).sum(dim=1)/(pr_norm * p_norm)
+    pr_norm = pr_norm[:, None].tile(1, pr_norm.size(0))
+    n_norm = neg_score.norm(p=2, dim=1)
+    n_norm = torch.max(n_norm, torch.ones_like(n_norm)*1e-8)
+    n_norm = n_norm[None, :].tile(pr_norm.size(0), 1)
+    neg = (prompt_score @ neg_score.T) / (pr_norm * n_norm)
+
+    if labels is not None:
+        # print("labels are being used!")
+        min_neg = labels.size(0) + 1
+        neg_labels = torch.zeros((labels.size(0), labels.size(0))).bool()
+        for i in range(labels.size(0)):
+            neg_labels[i, :] = (labels != labels[i])
+        min_neg = neg_labels.sum(dim=0).min()
+        idx_mask = torch.arange(neg.size(1)).tile(neg.size(0), 1)
+        idx_mask = torch.where(neg_labels, idx_mask, neg.size(1)+1)
+        idx_mask = idx_mask.sort(dim=1, descending=False)[0][:, :min_neg]
+        neg = neg.gather(1, idx_mask)
+
+    neg = torch.cat([neg, pos[:, None]], dim=1)
+    neg = torch.logsumexp(neg, dim=1)
+    loss = (-pos + neg).mean()
+    return loss
+
+def multiclass_triplet_loss(prompt_score, pos_score, neg_score, margin, labels=None):
+    exp_dims = (prompt_score.size(0), pos_score.size(0))
+    prompt_score = prompt_score.unsqueeze(0)
+    pos_score = pos_score.unsqueeze(1)
+    prompt_score = prompt_score.tile(exp_dims[1], 1, 1)
+    pos_score = pos_score.tile(1, exp_dims[0], 1)
+    pos_dists = (prompt_score - pos_score).norm(p=2, dim=2).T
     pos_dists = pos_dists.diagonal()
-    neg = neg.unsqueeze(1)
-    neg = neg.tile(1, exp_dims[1], 1)
-    neg_dists = (prompt - neg).norm(p=2, dim=2).T
-    neg_dists = ((margin - neg_dists).fill_diagonal_(0.))
+    neg_score = neg_score.unsqueeze(1)
+    neg_score = neg_score.tile(1, exp_dims[1], 1)
+    neg_dists = (prompt_score - neg_score).norm(p=2, dim=2).T
+    neg_dists = (margin - neg_dists).fill_diagonal_(0.)
+
+    if labels is not None:
+        # print("labels are being used!")
+        min_neg = labels.size(0) + 1
+        neg_labels = torch.zeros((labels.size(0), labels.size(0))).bool()
+        for i in range(labels.size(0)):
+            neg_labels[i, :] = (labels != labels[i])
+        min_neg = neg_labels.sum(dim=0).min()
+        idx_mask = torch.arange(neg_dists.size(1)).tile(neg_dists.size(0), 1)
+        idx_mask = torch.where(neg_labels, idx_mask, neg_dists.size(1)+1)
+        idx_mask = idx_mask.sort(dim=1, descending=False)[0][:, :min_neg]
+        neg_dists = neg_dists.gather(1, idx_mask)
+
     neg_dists = torch.max(neg_dists, torch.zeros_like(neg_dists))
     neg_dists = neg_dists.mean(dim=1)
     # print("Mean of the positive samples: ", pos_dists.mean().item(), "Mean of negative samples: ", neg_dists.mean().item())
     loss = (pos_dists + neg_dists).mean()
     return loss
 
-def ntxent_loss(prompt_score, pos_score, neg_score):
-    pr_norm = prompt_score.norm(p=2, dim=1)
-    pr_norm = torch.max(pr_norm, torch.ones_like(pr_norm)*1e-8)
-    p_norm = pos_score.norm(p=2, dim=1)
-    p_norm = torch.max(p_norm, torch.ones_like(p_norm)*1e-8)
-    pos = (prompt_score * pos_score).sum(dim=1)/(pr_norm * p_norm)
-    n_norm = neg_score.norm(p=2, dim=1)
-    pr_norm = pr_norm[:, None].tile(1, pr_norm.size(0))
-    n_norm = torch.max(n_norm, torch.ones_like(n_norm)*1e-8)
-    n_norm = n_norm[None, :].tile(pr_norm.size(0), 1)
-    neg = (prompt_score @ neg_score.T) / (pr_norm * n_norm)
-    neg = torch.cat([neg, pos[:, None]], dim=1)
-    neg = torch.logsumexp(neg, dim=1)
-    loss = (-pos + neg).mean()
-    return loss
+def aug_graph(org_graph, aug_prob, aug_type="link", mode="drop"):
+    if aug_type == "link":
+        edges = org_graph.edge_index
+        n_edges = org_graph.edge_index.size(1)
+        n_changes = int(n_edges * aug_prob)
+        perm = torch.randperm(n_edges)[n_changes:]
+        new_edges = edges[:, perm]
+        if mode != "drop":
+            add_edges = torch.stack(
+                [torch.randint(org_graph.x.size(0), (n_changes,)),
+                torch.randint(org_graph.x.size(0), (n_changes,))]
+                )
+            new_edges = torch.cat([new_edges, add_edges], dim=1)
+            new_edges = remove_self_loops(coalesce(new_edges))[0]
+        org_graph.edge_index = new_edges
+    elif aug_type == "feature":
+        n_nodes, n_feats = org_graph.x.size()
+        x = org_graph.x
+        if mode != "mask":
+            n_changes = int(n_feats * aug_prob)
+            perm_idxs = torch.randperm(n_feats)[:n_changes]
+            for idx in perm_idxs:
+                temp_perm = torch.randperm(n_nodes)
+                x[:, idx] = x[temp_perm, idx]
+        else:
+            x = x.reshape(-1)
+            n_changes = int(x.size(0) * aug_prob)
+            perm = torch.randperm(x.size(0))[:n_changes]
+            x[perm] = .0
+    return org_graph
+
+def test(
+        model, dataset, device, epoch=None, visualize=False,
+        colors=None, mode="prompt", pmodel=None):
+    model.eval()
+    test_loss, correct = 0, 0
+    for i, batch in enumerate(dataset.test_loader):
+        print("Test batch:", "@"*25, f"{i}/{len(dataset.test_loader)}", "@"*25, end='\r')
+        labels = batch.y.to(device)
+        batch = batch.to_data_list()
+        if mode == "prompt":
+            batch = [g.to(device) for g in batch]
+            batch = pmodel(batch)
+        x_adj_list = batch_to_xadj_list(batch, device)
+        test_out, embeds = model(x_adj_list)
+        if visualize:
+            visualize_and_save_tsne(
+                embeds.cpu().detach().numpy(),
+                colors[labels.cpu()] if colors is not None else None,
+                epoch if epoch is not None else 0)
+        test_loss += F.cross_entropy(test_out, labels, reduction="sum")
+        test_out = F.softmax(test_out, dim=1)
+        test_pred = test_out.max(dim=1)[1]
+        correct += int((test_pred == labels).sum())
+        batch, labels, x_adj_list, test_out, embeds = 0, 0, 0, 0, 0
+    test_loss /= dataset.n_test
+    test_acc = correct / dataset.n_test
+    return test_loss, test_acc
 
 def get_subgraph(graph, node_indices):
     node_indices = np.sort(node_indices)
@@ -53,22 +155,6 @@ def get_subgraph(graph, node_indices):
     sub_y = graph.y[node_indices]
     sub_g = Data(x=sub_x, edge_index=sub_edges, y=sub_y)
     return sub_g
-
-def aug_graph(org_graph, aug_prob, mode="drop"):
-    edges = org_graph.edge_index
-    n_edges = org_graph.edge_index.size(1)
-    n_changes = int(n_edges * aug_prob)
-    perm = torch.randperm(n_edges)[n_changes:]
-    new_edges = edges[:, perm]
-    if mode != "drop":
-        add_edges = torch.stack(
-            [torch.randint(org_graph.x.size(0), (n_changes,)),
-            torch.randint(org_graph.x.size(0), (n_changes,))]
-            )
-        new_edges = torch.cat([new_edges, add_edges], dim=1)
-        new_edges = remove_self_loops(coalesce(new_edges))[0]
-    org_graph.edge_index = new_edges
-    return org_graph
 
 def normalize_(input_tensor, dim=0, mode="max"):
     if mode == "max":
@@ -128,34 +214,6 @@ def visualize_and_save_tsne(features_tensor, colors, epoch, save_dir='feature_pl
     save_path = os.path.join(save_dir, f'tsne_plot_{epoch}.png')
     plt.savefig(save_path)
     plt.close()
-
-def test(
-        model, dataset, device, epoch=None, visualize=False,
-        colors=None, mode="prompt", pmodel=None):
-    model.eval()
-    test_loss, correct = 0, 0
-    for i, batch in enumerate(dataset.test_loader):
-        print("Test batch:", "@"*25, f"{i}/{len(dataset.test_loader)}", "@"*25, end='\r')
-        labels = batch.y.to(device)
-        batch = batch.to_data_list()
-        if mode == "prompt":
-            batch = [g.to(device) for g in batch]
-            batch = pmodel(batch)
-        x_adj_list = batch_to_xadj_list(batch, device)
-        test_out, embeds = model(x_adj_list)
-        if visualize:
-            visualize_and_save_tsne(
-                embeds.cpu().detach().numpy(),
-                colors[labels.cpu()] if colors is not None else None,
-                epoch if epoch is not None else 0)
-        test_loss += F.cross_entropy(test_out, labels, reduction="sum")
-        test_out = F.softmax(test_out, dim=1)
-        test_pred = test_out.max(dim=1)[1]
-        correct += int((test_pred == labels).sum())
-        batch, labels, x_adj_list, test_out, embeds = 0, 0, 0, 0, 0
-    test_loss /= dataset.n_test
-    test_acc = correct / dataset.n_test
-    return test_loss, test_acc
 
 def glist_to_gbatch(graph_list):
     g_loader = DataLoader(graph_list, batch_size=len(graph_list))

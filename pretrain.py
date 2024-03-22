@@ -10,20 +10,20 @@ from data_utils import make_datasets
 from utils import *
 
 
-s_dataset, t_dataset = make_datasets(
-        num_nsamples = 1000,
-        num_nclass = 7,
-        num_gclass = 5,
-        n_feats = 32,
-        ng_perclass = 100,
-        nn_perclass = (50, 100),
-        nlabel_perm = 0.5,
-        graph_selec_noise = 0.5,
-        cov_scale = 2,
-        train_per = 0.85,
-        test_per = 0.15,
-        norm_mode = "max",
-        visualize = False
+s_dataset, t_dataset =  make_datasets(
+    num_nsamples = 1000,
+    num_nclass = 7,
+    num_gclass = 5,
+    n_feats = 32,
+    ng_perclass = 100,
+    nn_perclass = (50, 100),
+    nlabel_perm = 0.5,
+    graph_selec_noise = 0.5,
+    cov_scale = 2,
+    train_per = 0.85,
+    test_per = 0.15,
+    norm_mode = "max",
+    visualize = False
 )
 
 h_dim = 64

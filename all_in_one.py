@@ -30,33 +30,14 @@ h_dim = 64
 ph_dim = 64
 o_dim = 64
 n_layers = 2
-n_epochs = 150
-temperature = 1
-n_drops = 0.15
-batch_size = 32
-n_augs = 2
-aug_type = "link"
-aug_mode = "mask"
-add_link_loss = False
-visualize = False
-if visualize:
-    colors = np.array([
-        "#"+''.join([random.choice('0123456789ABCDEF') for j in range(6)]) \
-        for i in range(s_dataset.y.unique().size(0))])
-else:
-    colors = None
-
 enc_model = GCN(t_dataset.n_feats, h_dim, nclass=t_dataset.num_gclass, dropout=0.2)
 main_model = GCN(t_dataset.n_feats, h_dim, nclass=t_dataset.num_gclass, dropout=0.2)
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-pmodel = LinkPredictionPrompt(
-    t_dataset.n_feats,
-    h_dim, t_dataset.n_feats,
-    num_layers = 2,
-    normalize = True,
-    has_head = False,
-    device = device,
-    has_gnn_encoder = False
+token_num = 50
+pmodel = HeavyPrompt(
+    s_dataset.x.size(1),
+    token_num,
+    trans_x=False
 )
 enc_model.to(device)
 main_model.to(device)
@@ -71,6 +52,19 @@ for param in enc_model.parameters():
     param.requires_grad = False
 for param in main_model.parameters():
     param.requires_grad = False
+
+n_epochs = 256
+temperature = 1
+n_drops = 0.15
+batch_size = 32
+n_augs = 2
+visualize = False
+if visualize:
+    colors = np.array([
+        "#"+''.join([random.choice('0123456789ABCDEF') for j in range(6)]) \
+        for i in range(s_dataset.y.unique().size(0))])
+else:
+    colors = None
 
 ug_graphs = []
 losses = []
@@ -109,34 +103,13 @@ for epoch in range(n_epochs):
     x_mean = 0
     counter = 0
     for i, batch in enumerate(t_dataset.train_loader):
-        optimizer.zero_grad()
-        # print(f"Train batch: {i}/{t_dataset.train_idx}")
         labels = batch.y
         batch = batch.to_data_list()
-        prompt_batch = [
-            aug_graph(Data(x=g.x, edge_index=g.edge_index, y=g.y), n_drops, aug_type = aug_type, mode = aug_mode).to(device)
-            for g in batch
-        ]
-        pos_batch = [
-            aug_graph(Data(x=g.x, edge_index=g.edge_index, y=g.y), n_drops, aug_type = aug_type, mode = aug_mode).to(device)
-            for g in batch
-        ]
-        neg_batch = [
-            aug_graph(Data(x=g.x, edge_index=g.edge_index, y=g.y), n_drops, aug_type = aug_type, mode = "arbitrary").to(device)
-            for g in batch
-        ]
-        prompt_batch = pmodel(prompt_batch)
+        prompt_batch = pmodel(batch)
         prompt_x_adj = batch_to_xadj_list(prompt_batch, device)
-        pos_x_adj = batch_to_xadj_list(pos_batch, device)
-        neg_x_adj = batch_to_xadj_list(neg_batch, device)
         prompt_out, _ = main_model(prompt_x_adj)
-        pos_out, _ = main_model(pos_x_adj)
-        neg_out, _ = main_model(neg_x_adj)
-        # loss = multiclass_triplet_loss(prompt_out, pos_out, neg_out, 1)
-        loss = ntxent_loss(prompt_out, pos_out, neg_out)
-        if add_link_loss:
-            adj_labels = get_adj_labels(batch).to(device)
-            loss += 0.2 * link_predict_loss(prompt_batch, adj_labels)
+        loss = F.cross_entropy(prompt_out, labels, reduction="mean")
+        optimizer.zero_grad()
         loss.backward()
         optimizer.step()
         # total_grad_norm = 0
