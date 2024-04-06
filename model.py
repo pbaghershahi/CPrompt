@@ -78,21 +78,39 @@ class LinkPredictionPrompt(nn.Module):
                  emb_dim,
                  h_dim,
                  output_dim,
-                 num_layers = 2,
-                 normalize = False,
-                 has_head = True,
-                 has_gnn_encoder = False,
+                 prompt_fn = "trans_x",
+                 token_num = 30,
                  device="cuda:0") -> None:
         super(LinkPredictionPrompt, self).__init__()
-        self.device = torch.device(device)
-        self.gnn1 = GCNConv(emb_dim, h_dim)
-        self.bn1 = nn.BatchNorm1d(h_dim)
-        self.gnn2 = GCNConv(h_dim, h_dim)
-        self.bn2 = nn.BatchNorm1d(h_dim)
         self.dropout = 0.2
-        self.linear1 = nn.Linear(emb_dim, h_dim)
+        self.device = torch.device(device)
         self.head = nn.Linear(h_dim, output_dim)
-        self.has_gnn_encoder = has_gnn_encoder
+        if prompt_fn == "trans_x":
+            self.linear1 = nn.Linear(emb_dim, h_dim)
+            self.prompt = self.trans_x
+        elif prompt_fn == "gnn":
+            self.gnn1 = GCNConv(emb_dim, h_dim)
+            self.bn1 = nn.BatchNorm1d(h_dim)
+            self.gnn2 = GCNConv(h_dim, h_dim)
+            self.bn2 = nn.BatchNorm1d(h_dim)
+            self.prompt = self.gnn
+        elif prompt_fn == "add_tokens":
+            cross_prune=0.1
+            inner_prune=0.3
+            self.inner_prune = inner_prune
+            self.cross_prune = cross_prune
+            self.token_embeds = torch.nn.Parameter(torch.empty(token_num, emb_dim))
+            torch.nn.init.kaiming_uniform_(self.token_embeds, nonlinearity='leaky_relu', mode='fan_in', a=0.01)
+            self.pg = self.pg_construct()
+            self.prompt = self.add_token
+
+    def pg_construct(self,):
+        token_sim = torch.mm(self.token_embeds, torch.transpose(self.token_embeds, 0, 1))
+        token_sim = torch.sigmoid(token_sim)
+        inner_adj = torch.where(token_sim < self.inner_prune, 0, token_sim)
+        edge_index = inner_adj.nonzero().t().contiguous()
+        pg = Data(x=self.token_embeds, edge_index=edge_index, y=torch.tensor([0]).long())
+        return pg
 
     def simmatToadj(self, adjacency_matrix):
         adjacency_matrix = adjacency_matrix.triu(diagonal=1)
@@ -102,10 +120,27 @@ class LinkPredictionPrompt(nn.Module):
             (adj_list[0][None, :], adj_list[1][None, :]),
             dim=0)
         return adj_list, edge_weights
+    
+    def add_token(self, graphs):
+        # pg = self.inner_structure_update()
+        inner_edge_index = self.pg.edge_index
+        token_num = self.pg.x.shape[0]
+        for graph in graphs:
+            g_edge_index = graph.edge_index + token_num
+            cross_dot = torch.mm(self.pg.x, torch.transpose(graph.x, 0, 1))
+            cross_sim = torch.sigmoid(cross_dot)  # 0-1 from prompt to input graph
+            cross_adj = torch.where(cross_sim < self.cross_prune, 0, cross_sim)
+            cross_edge_index = cross_adj.nonzero().t().contiguous()
+            cross_edge_index[1] = cross_edge_index[1] + token_num
+            x = torch.cat([self.pg.x, graph.x], dim=0)
+            edge_index = torch.cat([inner_edge_index, g_edge_index, cross_edge_index], dim=1)
+            graph.edge_index = edge_index
+            graph.x = x
+        return graphs
 
-    def forward_gnn(self, graph):
-        emb_out = graph.x.squeeze()
-        if self.has_gnn_encoder:
+    def gnn(self, graphs):
+        for graph in graphs:
+            emb_out = graph.x.squeeze()
             emb_out = self.gnn1(emb_out, graph.edge_index)
             emb_out = F.relu(emb_out)
             emb_out = F.dropout(emb_out, self.dropout, training=self.training)
@@ -113,21 +148,20 @@ class LinkPredictionPrompt(nn.Module):
             emb_out = F.relu(emb_out)
             emb_out = F.dropout(emb_out, self.dropout, training=self.training)
             emb_out = self.head(emb_out)
-        else:
+            graph.x = emb_out
+        return graphs
+
+    def trans_x(self, graphs):
+        for graph in graphs:
+            emb_out = graph.x.squeeze()
             emb_out = F.relu(self.linear1(emb_out))
             emb_out = F.dropout(emb_out, self.dropout, training=self.training)
             emb_out = self.head(emb_out)
-        return emb_out
-
-    def forward(self, graphs):
-        for graph in graphs:
-            graph.x = self.forward_gnn(graph)
+            graph.x = emb_out
         return graphs
 
     def forward(self, graphs):
-        for graph in graphs:
-            graph.x = self.forward_gnn(graph)
-        return graphs
+        return self.prompt(graphs)
     
 
 class GraphClassification(Dataset):

@@ -51,13 +51,13 @@ main_model = GCN(t_dataset.n_feats, h_dim, nclass=t_dataset.num_gclass, dropout=
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 pmodel = LinkPredictionPrompt(
     t_dataset.n_feats,
-    h_dim, t_dataset.n_feats,
-    num_layers = 2,
-    normalize = True,
-    has_head = False,
-    device = device,
-    has_gnn_encoder = False
+    h_dim, 
+    t_dataset.n_feats,
+    prompt_fn = "trans_x",
+    token_num = 30,
+    device = device
 )
+
 enc_model.to(device)
 main_model.to(device)
 pmodel.to(device)
