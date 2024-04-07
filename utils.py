@@ -25,7 +25,18 @@ def link_predict_loss(graphs, gt_adj_matrix):
     loss = F.binary_cross_entropy_with_logits(all_scores, gt_adj_matrix)
     return loss
 
-def ntxent_loss(prompt_score, pos_score, neg_score, labels=None):
+def scale_array(in_tensor, t_min, t_max):
+    min_v = in_tensor.min()
+    max_v = in_tensor.max()
+    in_tensor = (in_tensor-min_v)*(t_max-t_min)/(max_v-min_v) + t_min
+    return in_tensor
+
+def ntxent_loss(
+        prompt_score, 
+        pos_score, 
+        neg_score, 
+        labels=None, 
+        weighting=None):
     pr_norm = prompt_score.norm(p=2, dim=1)
     pr_norm = torch.max(pr_norm, torch.ones_like(pr_norm)*1e-8)
     p_norm = pos_score.norm(p=2, dim=1)
@@ -50,6 +61,29 @@ def ntxent_loss(prompt_score, pos_score, neg_score, labels=None):
         neg = neg.gather(1, idx_mask)
 
     neg = torch.cat([neg, pos[:, None]], dim=1)
+    if weighting == "distance":
+        # print("Weighted method is being applied!")
+        exp_dims = (prompt_score.size(0), pos_score.size(0))
+        prompt_score = prompt_score.unsqueeze(0)
+        pos_score = pos_score.unsqueeze(1)
+        prompt_score = prompt_score.tile(exp_dims[1], 1, 1)
+        pos_score = pos_score.tile(1, exp_dims[0], 1)
+        pos_dists = (prompt_score - pos_score).norm(p=2, dim=2).T
+        pos_dists = pos_dists.diagonal()
+        neg_score = neg_score.unsqueeze(1)
+        neg_score = neg_score.tile(1, exp_dims[1], 1)
+        neg_dists = (prompt_score - neg_score).norm(p=2, dim=2).T
+        neg_dists = torch.cat([neg_dists, pos_dists[:, None]], dim=1).detach().clone()
+        weights = (neg_dists.min(dim=1).values)/neg_dists[:, -1]
+    elif weighting == "similarity":
+        dists = (1/neg).detach().clone()
+        # min_dists = dists.min(dim=1).values[:, None]
+        # weights = min_dists / dists
+        weights = (dists.min(dim=1).values)/dists[:, -1]
+        pos += weights
+        neg[:, -1] = pos
+    else:
+        pass
     neg = torch.logsumexp(neg, dim=1)
     loss = (-pos + neg).mean()
     return loss

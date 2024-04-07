@@ -35,7 +35,7 @@ temperature = 1
 n_drops = 0.15
 batch_size = 32
 n_augs = 2
-aug_type = "link"
+aug_type = "feature"
 aug_mode = "mask"
 add_link_loss = False
 visualize = False
@@ -46,18 +46,25 @@ if visualize:
 else:
     colors = None
 
+
+# seed_value = 27324
+# torch.manual_seed(seed_value)
+# if torch.cuda.is_available():
+#     torch.cuda.manual_seed_all(seed_value)
+
 enc_model = GCN(t_dataset.n_feats, h_dim, nclass=t_dataset.num_gclass, dropout=0.2)
 main_model = GCN(t_dataset.n_feats, h_dim, nclass=t_dataset.num_gclass, dropout=0.2)
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 pmodel = LinkPredictionPrompt(
     t_dataset.n_feats,
-    h_dim, 
-    t_dataset.n_feats,
+    h_dim, t_dataset.n_feats,
+    num_layers = 2,
+    normalize = True,
+    has_head = False,
     prompt_fn = "trans_x",
     token_num = 30,
     device = device
 )
-
 enc_model.to(device)
 main_model.to(device)
 pmodel.to(device)
@@ -110,11 +117,14 @@ for epoch in range(n_epochs):
     counter = 0
     for i, batch in enumerate(t_dataset.train_loader):
         optimizer.zero_grad()
-        # print(f"Train batch: {i}/{t_dataset.train_idx}")
         labels = batch.y
         batch = batch.to_data_list()
+        # prompt_batch = [
+        #     aug_graph(Data(x=g.x, edge_index=g.edge_index, y=g.y), n_drops, aug_type = aug_type, mode = aug_mode).to(device)
+        #     for g in batch
+        # ]
         prompt_batch = [
-            aug_graph(Data(x=g.x, edge_index=g.edge_index, y=g.y), n_drops, aug_type = aug_type, mode = aug_mode).to(device)
+            Data(x=g.x, edge_index=g.edge_index, y=g.y).to(device)
             for g in batch
         ]
         pos_batch = [
@@ -133,10 +143,10 @@ for epoch in range(n_epochs):
         pos_out, _ = main_model(pos_x_adj)
         neg_out, _ = main_model(neg_x_adj)
         # loss = multiclass_triplet_loss(prompt_out, pos_out, neg_out, 1)
-        loss = ntxent_loss(prompt_out, pos_out, neg_out)
+        loss = ntxent_loss(prompt_out, pos_out, neg_out, weighting=None)
         if add_link_loss:
             adj_labels = get_adj_labels(batch).to(device)
-            loss += 0.2 * link_predict_loss(prompt_batch, adj_labels)
+            loss += link_predict_loss(prompt_batch, adj_labels)
         loss.backward()
         optimizer.step()
         # total_grad_norm = 0

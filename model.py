@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from typing import List
 from torch_geometric.data import Data
+from copy import deepcopy
 from torch_geometric.nn import GCNConv
 from torch_geometric.loader import DataLoader
 from utils import *
@@ -502,6 +503,89 @@ class RandomGraphDatset(RandomNodeDatset):
         plt.ylabel("Component 2")
         plt.savefig(save_path)
         plt.close()
+
+class GDataset(nn.Module):
+    def __init__(self,):
+        pass
+
+    def init_loaders(self,):
+        "Implement this is children classes"
+        pass
+
+    def normalize_feats(self,):
+        "Implement this is children classes"
+        return "x"
+
+    def visualize(self,):
+        "Implement this is children classes"
+        pass
+
+class ToGraphDataset(GDataset):
+    def __init__(self,
+                 main_dataset,
+                 normalize=False,
+                 **kwargs) -> None:
+        super(ToGraphDataset, self).__init__()
+        self.n_feats = main_dataset.x.size(1)
+        self.num_nsamples = main_dataset.x.size(0)
+        self.num_nclass = main_dataset.num_node_labels
+        self.num_gclass = main_dataset.num_classes
+        self.num_gsamples = len(main_dataset)
+        self.x = deepcopy(main_dataset.x)
+        if normalize:
+            self.normalize_feats(kwargs["normalize_mode"])
+
+    def gen_graph_ds(self, dataset):
+        x_idxs = dataset.slices["x"]
+        self.all_graphs = []
+        for i in range(x_idxs.size(0)-1):
+            g = dataset[i]
+            temp_g = Data(x=self.x[x_idxs[i]:x_idxs[i+1], :], edge_index=g.edge_index, y=g.y)
+            self.all_graphs.append(temp_g)
+
+    def init_loaders(self, train_per=0.85, test_per=0.15, batch_size=32, shuffle=True) -> None:
+        if shuffle:
+            perm = list(range(len(self.all_graphs)))
+            random.shuffle(perm)
+            self.all_graphs = [self.all_graphs[idx] for idx in perm]
+        if train_per + test_per != 1.0:
+            valid_per = 1 - (train_per + test_per)
+        else:
+            valid_per = 0.0
+        self.train_idx = int(self.num_gsamples * train_per)
+        self.n_train = self.train_idx
+        self.n_valid = int(self.num_gsamples * valid_per)
+        self.test_idx = self.train_idx + self.n_valid
+        self.n_test = self.num_gsamples - self.test_idx
+        self.train_loader = DataLoader(self.all_graphs[:self.n_train], batch_size=batch_size, shuffle=True)
+        self.valid_loader = DataLoader(self.all_graphs[self.n_train:self.test_idx], batch_size=batch_size, shuffle=False)
+        self.test_loader = DataLoader(self.all_graphs[self.test_idx:], batch_size=batch_size, shuffle=False)
+
+    def visualize(self, save_path) -> None:
+        x_graphs = []
+        y_graphs = []
+        for graph in self.all_graphs:
+            x_graphs.append(graph.x.mean(axis=0))
+            y_graphs.append(graph.y)
+        x_graphs = np.array(x_graphs)
+        y_graphs = np.array(y_graphs)
+        tsne = TSNE(n_components=2, random_state=42)
+        x_tsne = tsne.fit_transform(x_graphs)
+        plt.figure(figsize=(8, 6))
+        plt.scatter(x_tsne[:, 0], x_tsne[:, 1], c=y_graphs, cmap=plt.cm.Set1, edgecolor='k')
+        plt.title("t-SNE Embeddings")
+        plt.xlabel("Component 1")
+        plt.ylabel("Component 2")
+        plt.savefig(save_path)
+        plt.close()
+
+    def add_multivariate_noise(self, mean, cov_matrix, inplace=True) -> None:
+        n_samples, n_feats = self.x.shape
+        noise = np.random.multivariate_normal(mean, cov_matrix, n_samples)
+        self.x += torch.as_tensor(noise, dtype=torch.float, device=self.x.device)
+
+    def normalize_feats(self, normalize_mode="max"):
+        self.x = normalize_(self.x, dim=0, mode=normalize_mode)
 
 class HeavyPrompt(nn.Module):
     def __init__(self, token_dim, token_num, cross_prune=0.1, inner_prune=0.3, trans_x=False):

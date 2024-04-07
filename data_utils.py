@@ -1,5 +1,6 @@
 import torch, random, os
 import numpy as np
+from torch_geometric.datasets import QM9, TUDataset, CitationFull
 from utils import *
 from model import *
 
@@ -80,4 +81,47 @@ def make_datasets(
         s_dataset.visualize("/content/CPrompt/tsne_source.png")
         t_dataset.visualize("/content/CPrompt/tsne_destination.png")
     
+    return s_dataset, t_dataset
+
+def get_dataset(
+        ds_name,
+        cov_scale = 2,
+        train_per = 0.85,
+        test_per = 0.15,
+        norm_mode = "max",
+        node_attributes = True,
+        visualize = False):
+    
+    """ Currently supported datasets: 
+        - ENZYMES
+        - PROTEINS_full
+    """
+    dataset = TUDataset(
+        root = 'data/TUDataset',
+        name = ds_name,
+        use_node_attr = node_attributes
+        )
+
+    ntotal_graphs = len(dataset)
+    perm = torch.randperm(ntotal_graphs)
+    s_perm = perm[:int(ntotal_graphs*0.5)]
+    t_perm = perm[int(ntotal_graphs*0.5):]
+    s_ds = dataset.copy(s_perm)
+    t_ds = dataset.copy(t_perm)
+
+    s_dataset = ToGraphDataset(s_ds, normalize=True, normalize_mode="max")
+    s_dataset.gen_graph_ds(s_ds)
+    s_dataset.init_loaders(train_per=train_per, test_per=test_per, shuffle=False)
+    t_dataset = ToGraphDataset(t_ds)
+    mean = np.zeros(t_dataset.n_feats)
+    cov_matrix = np.eye(t_dataset.n_feats) * cov_scale
+    t_dataset.add_multivariate_noise(mean, cov_matrix)
+    t_dataset.normalize_feats(normalize_mode=norm_mode)
+    t_dataset.gen_graph_ds(t_ds)
+    t_dataset.init_loaders(train_per=train_per, test_per=test_per)
+
+    if visualize:
+        s_dataset.visualize("/content/CPrompt/tsne_source.png")
+        t_dataset.visualize("/content/CPrompt/tsne_destination.png")
+
     return s_dataset, t_dataset

@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 from torch_geometric.data import Data
 from model import GCN, LinkPredictionPrompt
 from copy import deepcopy
+from datetime import datetime
 from data_utils import make_datasets
 from utils import *
 
@@ -46,7 +47,7 @@ obj_fun = nn.CrossEntropyLoss()
 optimizer = Adam(model.parameters(), lr=1e-2)
 scheduler = StepLR(optimizer, step_size=100, gamma=0.5)
 
-n_epochs = 30
+n_epochs = 250
 for epoch in range(n_epochs):
     model.train()
     # s_dataset._shuffle()
