@@ -275,6 +275,21 @@ def simmatToadj(adjacency_matrix):
         dim=0)
     return adjacency_matrix
 
+def empty_directory(directory):
+    if not os.path.exists(directory):
+        print(f"The directory '{directory}' does not exist.")
+        return
+    for filename in os.listdir(directory):
+        filepath = os.path.join(directory, filename)
+        try:
+            if os.path.isfile(filepath):
+                os.remove(filepath)
+            elif os.path.isdir(filepath):
+                empty_directory(filepath)
+                os.rmdir(filepath)
+        except Exception as e:
+            print(f"Failed to delete {filepath}: {e}")
+
 """
 Contrastive loss between two augmented graphs of one original graph
 with other graphs of a batch.
@@ -296,10 +311,10 @@ Contrastive loss between a graph and its augmentation for all
 original graphs with other graphs of a batch.
 """
 
-def contrastive_loss(emb_mat, temperature=1, device='cpu'):
-    sim_mat = emb_mat[:emb_mat.size(0)//2, :] @ emb_mat[emb_mat.size(0)//2:, :].T
-    pos_scores = sim_mat.diagonal()
-    neg_scores = torch.logsumexp(sim_mat, dim=1)
-    loss_partial = neg_scores - pos_scores
-    loss = torch.mean(loss_partial)
-    return loss
+# def contrastive_loss(emb_mat, temperature=1, device='cpu'):
+#     sim_mat = emb_mat[:emb_mat.size(0)//2, :] @ emb_mat[emb_mat.size(0)//2:, :].T
+#     pos_scores = sim_mat.diagonal()
+#     neg_scores = torch.logsumexp(sim_mat, dim=1)
+#     loss_partial = neg_scores - pos_scores
+#     loss = torch.mean(loss_partial)
+#     return loss
