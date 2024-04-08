@@ -124,7 +124,7 @@ def cal_acc(loader, netF, netB, netC):
     with torch.no_grad():
         iter_test = iter(loader)
         for i in range(len(loader)):
-            data = iter_test.next()
+            data = next(iter_test)
             inputs = data[0]
             labels = data[1]
             inputs = inputs.cuda()
@@ -177,10 +177,10 @@ def train_source(args):
 
     while iter_num < max_iter:
         try:
-            inputs_source, labels_source = iter_source.next()
+            inputs_source, labels_source = next(iter_source)
         except:
             iter_source = iter(dset_loaders["source_tr"])
-            inputs_source, labels_source = iter_source.next()
+            inputs_source, labels_source = next(iter_source)
 
         if inputs_source.size(0) == 1:
             continue
@@ -297,10 +297,10 @@ def train_target(args):
     while iter_num < max_iter:
         optimizer.zero_grad()
         try:
-            inputs_test, _, tar_idx = iter_test.next()
+            inputs_test, _, tar_idx = next(iter_test)
         except:
             iter_test = iter(dset_loaders["target"])
-            inputs_test, _, tar_idx = iter_test.next()
+            inputs_test, _, tar_idx = next(iter_test)
 
         if inputs_test.size(0) == 1:
             continue
@@ -363,7 +363,7 @@ def obtain_label(loader, netF, netB, netC, args, c=None):
     with torch.no_grad():
         iter_test = iter(loader)
         for _ in range(len(loader)):
-            data = iter_test.next()
+            data = next(iter_test)
             inputs = data[0]
             labels = data[1]
             inputs = inputs.cuda()
