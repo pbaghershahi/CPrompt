@@ -7,6 +7,19 @@ from torch_geometric.utils import to_dense_adj, subgraph, remove_self_loops, coa
 from torch_geometric.data import Data
 from torch_geometric.loader import DataLoader
 
+
+def cal_entropy(input_):
+    entropy = -input_ * torch.log(input_ + 1e-8)
+    entropy = torch.sum(entropy, dim=1)
+    return entropy
+
+def cal_JSD(p: torch.tensor, q: torch.tensor):
+    p, q = p.view(-1, p.size(-1)), q.view(-1, q.size(-1))
+    m = (0.5 * (p + q)).log()
+    jsd = 0.5 * (F.kl_div(p.log(), m, reduction='mean', log_target=False) \
+                 + F.kl_div(q.log(), m, reduction='mean', log_target=False))
+    return jsd
+
 def get_adj_labels(g_batch):
     adj_matrices = []
     for g in g_batch:
@@ -126,7 +139,7 @@ def aug_graph(org_graph, aug_prob, aug_type="link", mode="drop"):
         n_changes = int(n_edges * aug_prob)
         perm = torch.randperm(n_edges)[n_changes:]
         new_edges = edges[:, perm]
-        if mode != "drop":
+        if mode != "mask":
             add_edges = torch.stack(
                 [torch.randint(org_graph.x.size(0), (n_changes,)),
                 torch.randint(org_graph.x.size(0), (n_changes,))]

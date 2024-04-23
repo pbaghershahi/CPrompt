@@ -86,6 +86,7 @@ def make_datasets(
 def get_dataset(
         ds_name,
         cov_scale = 2,
+        mean_shift = 0,
         train_per = 0.85,
         test_per = 0.15,
         norm_mode = "max",
@@ -113,7 +114,7 @@ def get_dataset(
     s_dataset.gen_graph_ds(s_ds)
     s_dataset.init_loaders(train_per=train_per, test_per=test_per, shuffle=False)
     t_dataset = ToGraphDataset(t_ds)
-    mean = np.zeros(t_dataset.n_feats)
+    mean = np.zeros(t_dataset.n_feats) * mean_shift
     cov_matrix = np.eye(t_dataset.n_feats) * cov_scale
     t_dataset.add_multivariate_noise(mean, cov_matrix)
     t_dataset.normalize_feats(normalize_mode=norm_mode)

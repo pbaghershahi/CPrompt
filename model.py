@@ -26,7 +26,10 @@ class GCN(nn.Module):
         self.head = nn.Linear(nhid, nclass)
         self.dropout = dropout
 
-    def forward(self, x_adj_list):
+    def forward(self, x_adj_list, decoder=True):
+        if not decoder:
+            scores = scores = self.head(g_embeds)
+            return scores, ""
         g_embeds = []
         for i, (x, adj) in enumerate(x_adj_list):
             x = self.gc1(x, adj)
@@ -124,6 +127,7 @@ class LinkPredictionPrompt(nn.Module):
     
     def add_token(self, graphs):
         # pg = self.inner_structure_update()
+        self.pg.to(graphs[0].x.device)
         inner_edge_index = self.pg.edge_index
         token_num = self.pg.x.shape[0]
         for graph in graphs:
