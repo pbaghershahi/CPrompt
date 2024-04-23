@@ -613,6 +613,7 @@ class HeavyPrompt(nn.Module):
 
     def forward(self, graph_batch):
         # pg = self.inner_structure_update()
+        self.pg.to(graph_batch[0].x.device)
         inner_edge_index = self.pg.edge_index
         token_num = self.pg.x.shape[0]
 
