@@ -16,8 +16,8 @@ def cal_entropy(input_):
 def cal_JSD(p: torch.tensor, q: torch.tensor):
     p, q = p.view(-1, p.size(-1)), q.view(-1, q.size(-1))
     m = (0.5 * (p + q)).log()
-    jsd = 0.5 * (F.kl_div(p.log(), m, reduction='mean', log_target=False) \
-                 + F.kl_div(q.log(), m, reduction='mean', log_target=False))
+    jsd = 0.5 * (F.kl_div(p.log(), m, reduction='batchmean', log_target=False) \
+                 + F.kl_div(q.log(), m, reduction='batchmean', log_target=False))
     return jsd
 
 def get_adj_labels(g_batch):

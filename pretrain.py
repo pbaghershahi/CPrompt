@@ -11,19 +11,14 @@ from data_utils import make_datasets
 from utils import *
 
 
-s_dataset, t_dataset =  make_datasets(
-    num_nsamples = 1000,
-    num_nclass = 7,
-    num_gclass = 5,
-    n_feats = 32,
-    ng_perclass = 100,
-    nn_perclass = (50, 100),
-    nlabel_perm = 0.5,
-    graph_selec_noise = 0.5,
+s_dataset, t_dataset = get_dataset(
+    "ENZYMES",
     cov_scale = 2,
-    train_per = 0.85,
-    test_per = 0.15,
+    mean_shift = 20.,
+    train_per = 0.80,
+    test_per = 0.20,
     norm_mode = "max",
+    node_attributes = True,
     visualize = False
 )
 
@@ -47,7 +42,7 @@ obj_fun = nn.CrossEntropyLoss()
 optimizer = Adam(model.parameters(), lr=1e-2)
 scheduler = StepLR(optimizer, step_size=100, gamma=0.5)
 
-n_epochs = 250
+n_epochs = 150
 for epoch in range(n_epochs):
     model.train()
     # s_dataset._shuffle()

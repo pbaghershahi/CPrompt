@@ -1,18 +1,3 @@
-import torch, os, random
-import torch.nn as nn
-import torch.nn.functional as F
-import numpy as np
-import matplotlib.pyplot as plt
-from torch_geometric.data import Data
-from model import GCN, LinkPredictionPrompt
-from copy import deepcopy
-from data_utils import make_datasets
-from scipy.spatial.distance import cdist
-import ipdb
-from utils import *
-from data_utils import *
-from model import *
-
 average_acc = []
 for _ in range(5):
 
@@ -26,6 +11,7 @@ for _ in range(5):
     n_raug = 0.15
     batch_size = 32
     n_augs = 2
+    num_neg = 5
     aug_type = "feature"
     aug_mode = "mask"
     add_link_loss = False
@@ -120,9 +106,10 @@ for _ in range(5):
                 aug_graph(Data(x=g.x, edge_index=g.edge_index, y=g.y), p_raug, aug_type = aug_type, mode = aug_mode).to(device)
                 for g in batch
             ]
+            # ipdb.set_trace()
             neg_batch = [
                 aug_graph(Data(x=g.x, edge_index=g.edge_index, y=g.y), n_raug, aug_type = aug_type, mode = "arbitrary").to(device)
-                for g in batch
+                for g in batch for _ in range(num_neg)
             ]
             prompt_batch = pmodel(prompt_batch)
             prompt_x_adj = batch_to_xadj_list(prompt_batch, device)
@@ -131,6 +118,14 @@ for _ in range(5):
             prompt_out, prompt_embed = main_model(prompt_x_adj)
             pos_out, pos_embed = main_model(pos_x_adj)
             neg_out, neg_embed = main_model(neg_x_adj)
+            neg_jsds = torch.zeros((len(batch), num_neg), dtype=torch.float, device=neg_out.device)
+            neg_out_reshaped = neg_out.view(len(batch), num_neg, -1).detach().clone()
+            for k in range(prompt_out.size(0)):
+                for l in range(num_neg):
+                    neg_jsds[k, l] = cal_JSD(prompt_out[k, :], neg_out_reshaped[k, l, :])
+            _, argmax_loss = neg_jsds.sort(dim=1, descending=False)
+            argmax_loss = ((argmax_loss + (torch.arange(len(batch)).to(device) * num_neg)[:, None])[:, :1]).reshape(-1)
+            neg_out = neg_out[argmax_loss, :].view(len(batch), 1, -1).mean(dim=1)
             # loss = multiclass_triplet_loss(prompt_out, pos_out, neg_out, 1)
             loss = ntxent_loss(prompt_out, pos_out, neg_out, weighting=None)
             if add_link_loss:
