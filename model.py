@@ -19,7 +19,7 @@ class GCN(nn.Module):
 
     def forward(self, x_adj_list, decoder=True):
         if not decoder:
-            scores = scores = self.head(g_embeds)
+            scores = scores = self.head(x_adj_list)
             return scores, ""
         g_embeds = []
         for i, (x, adj) in enumerate(x_adj_list):
