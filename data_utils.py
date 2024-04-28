@@ -4,7 +4,7 @@ from torch_geometric.datasets import QM9, TUDataset, CitationFull
 from utils import *
 from model import *
 import pandas as pd
-from torch_geometric.loader import DataLoader
+from torch_geometric.loader import DataLoader as PyG_Dataloader
 from torch_geometric.loader import NeighborLoader
 from torch.utils.data import Dataset
 from sklearn.datasets import make_spd_matrix
@@ -323,9 +323,9 @@ class RandomGraphDatset(RandomNodeDatset):
                 valid_graphs.append(Data(x=graph.x, edge_index=graph.edges, y=torch.tensor(self.all_labels[i])))
             else:
                 test_graphs.append(Data(x=graph.x, edge_index=graph.edges, y=torch.tensor(self.all_labels[i])))
-        self.train_loader = DataLoader(train_graphs, batch_size=batch_size, shuffle=True)
-        self.valid_loader = DataLoader(valid_graphs, batch_size=batch_size, shuffle=False)
-        self.test_loader = DataLoader(test_graphs, batch_size=batch_size, shuffle=False)
+        self.train_loader = PyG_Dataloader(train_graphs, batch_size=batch_size, shuffle=True)
+        self.valid_loader = PyG_Dataloader(valid_graphs, batch_size=batch_size, shuffle=False)
+        self.test_loader = PyG_Dataloader(test_graphs, batch_size=batch_size, shuffle=False)
 
     def to_tensor(self, all_graphs=True, normalize_mode=False) -> None:
         self.x = torch.as_tensor(self.x)
@@ -396,7 +396,7 @@ class ToGraphDataset(GDataset):
             temp_g = Data(x=self.x[x_idxs[i]:x_idxs[i+1], :], edge_index=g.edge_index, y=g.y)
             self.all_graphs.append(temp_g)
 
-    def init_loaders(self, train_per=0.85, test_per=0.15, batch_size=32, shuffle=True) -> None:
+    def init_loaders(self, train_per=0.85, test_per=0.15, batch_size=32, shuffle=True, **kwargs) -> None:
         if shuffle:
             perm = list(range(len(self.all_graphs)))
             random.shuffle(perm)
@@ -410,9 +410,9 @@ class ToGraphDataset(GDataset):
         self.n_valid = int(self.num_gsamples * valid_per)
         self.test_idx = self.train_idx + self.n_valid
         self.n_test = self.num_gsamples - self.test_idx
-        self.train_loader = DataLoader(self.all_graphs[:self.n_train], batch_size=batch_size, shuffle=True)
-        self.valid_loader = DataLoader(self.all_graphs[self.n_train:self.test_idx], batch_size=batch_size, shuffle=False)
-        self.test_loader = DataLoader(self.all_graphs[self.test_idx:], batch_size=batch_size, shuffle=False)
+        self.train_loader = PyG_Dataloader(self.all_graphs[:self.n_train], batch_size=batch_size, shuffle=True)
+        self.valid_loader = PyG_Dataloader(self.all_graphs[self.n_train:self.test_idx], batch_size=batch_size, shuffle=False)
+        self.test_loader = PyG_Dataloader(self.all_graphs[self.test_idx:], batch_size=batch_size, shuffle=False)
 
     def visualize(self, save_path) -> None:
         x_graphs = []
@@ -515,12 +515,13 @@ def make_datasets(
     
     return s_dataset, t_dataset
 
-def get_dataset(
+def get_graph_dataset(
         ds_name,
         cov_scale = 2,
         mean_shift = 0,
         train_per = 0.85,
         test_per = 0.15,
+        batch_size = 32,
         norm_mode = "max",
         node_attributes = True,
         visualize = False):
@@ -544,14 +545,222 @@ def get_dataset(
 
     s_dataset = ToGraphDataset(s_ds, normalize=True, normalize_mode="max")
     s_dataset.gen_graph_ds(s_ds)
-    s_dataset.init_loaders(train_per=train_per, test_per=test_per, shuffle=False)
+    s_dataset.init_loaders(
+        train_per = train_per, 
+        test_per = test_per, 
+        batch_size = batch_size,
+        shuffle = False
+        )
     t_dataset = ToGraphDataset(t_ds)
     mean = np.ones(t_dataset.n_feats) * mean_shift
     cov_matrix = np.eye(t_dataset.n_feats) * cov_scale
     t_dataset.add_multivariate_noise(mean, cov_matrix)
     t_dataset.normalize_feats(normalize_mode=norm_mode)
     t_dataset.gen_graph_ds(t_ds)
-    t_dataset.init_loaders(train_per=train_per, test_per=test_per)
+    t_dataset.init_loaders(
+        train_per = train_per, 
+        test_per = test_per,
+        batch_size = batch_size,
+        shuffle = True,
+        )
+
+    if visualize:
+        s_dataset.visualize("/content/CPrompt/tsne_source.png")
+        t_dataset.visualize("/content/CPrompt/tsne_destination.png")
+
+    return s_dataset, t_dataset
+
+
+class SubgraphSet(Dataset):
+    def __init__(self,
+                 graph_data,
+                 n_hopes,
+                 **kwargs) -> None:
+        super(SubgraphSet, self).__init__()
+        self._data = graph_data
+        self.all_nids, self.all_edges = self.init_induced_graphs(smallest_size=10, largest_size=30)
+
+    def init_induced_graphs(self, smallest_size=10, largest_size=30):
+        induced_nodes = []
+        induced_edge_idxs = []
+        for index in range(self._data.x.size(0)):
+            current_label = self._data.y[index].item()
+
+            current_hop = 2
+            subset, _, _, _ = k_hop_subgraph(
+                node_idx=index, num_hops=current_hop, edge_index = self._data.edge_index, 
+                num_nodes = self._data.x.size(0), relabel_nodes = True
+                )
+
+            while len(subset) < smallest_size and current_hop < 5:
+                current_hop += 1
+                subset, _, _, _ = k_hop_subgraph(
+                    node_idx = index, num_hops=current_hop,
+                    edge_index = self._data.edge_index, 
+                    num_nodes = self._data.x.size(0), relabel_nodes = True
+                    )
+
+            if len(subset) < smallest_size:
+                need_node_num = smallest_size - len(subset)
+                pos_nodes = torch.argwhere(self._data.y == int(current_label)) 
+                candidate_nodes = torch.from_numpy(np.setdiff1d(pos_nodes.numpy(), subset.numpy()))
+                candidate_nodes = candidate_nodes[torch.randperm(candidate_nodes.size(0))][:need_node_num]
+                subset = torch.cat([torch.flatten(subset), torch.flatten(candidate_nodes)])
+
+            if len(subset) > largest_size:
+                subset = subset[torch.randperm(subset.shape[0])][:largest_size - 1]
+                subset = torch.unique(torch.cat([torch.LongTensor([index]), torch.flatten(subset)]))
+
+            # print(subset, subset.max(), self._data.x.size(), self._data.x[subset.max()])
+            sub_edge_index, _ = subgraph(subset, self._data.edge_index, num_nodes=self._data.x.size(0), relabel_nodes=True)
+            induced_nodes.append(subset)
+            induced_edge_idxs.append(sub_edge_index)
+
+        return induced_nodes, induced_edge_idxs
+
+    def __len__(self):
+        return self._data.x.size(0)
+
+    def __getitem__(self, indices):
+        if isinstance(indices, int):
+            indices = [indices]
+        elif isinstance(indices, slice):
+            indices = [i for i in range(*indices.indices(len(self)))]
+        else:
+            raise TypeError("Invalid index type. Must be int, slice, or list.")
+        all_graphs = []
+        for idx in indices:
+            x = self._data.x[self.all_nids[idx]]
+            y = self._data.y[idx]
+            edges = self.all_edges[idx]
+            all_graphs.append(Data(x=x, edge_index=edges, y=y))
+        # return all_graphs, self._data.y[self.r_nodes[indices]]
+        return all_graphs
+
+
+class NodeToGraphDataset(GDataset):
+    def __init__(self,
+                 main_dataset,
+                 normalize = False,
+                 shuffle = False,
+                 **kwargs) -> None:
+        super(NodeToGraphDataset, self).__init__()
+        if isinstance(main_dataset, PyG_Dataset):
+            if shuffle:
+                self._data = main_dataset.shuffle()._data
+            else:
+                self._data = main_dataset._data
+        elif isinstance(main_dataset, Data):
+            self._data = main_dataset
+        else:
+            raise "Data type is not supported!"
+        self.n_feats = main_dataset.x.size(1)
+        self.num_nsamples = main_dataset.x.size(0)
+        self.num_nclass = main_dataset.y.unique().size(0)
+        self.num_gclass = self.num_nclass
+        self.num_gsamples = self.num_nsamples
+        # self.x = deepcopy(main_dataset.x)
+        if normalize:
+            self.normalize_feats(kwargs["normalize_mode"])
+
+    @property
+    def x(self,):
+        return self._data.x
+
+    def add_multivariate_noise(self, mean, cov_matrix, inplace=True) -> None:
+        n_samples, n_feats = self.x.shape
+        noise = np.random.multivariate_normal(mean, cov_matrix, n_samples)
+        self._data.x += torch.as_tensor(noise, dtype=torch.float, device=self._data.x.device)
+
+    def normalize_feats(self, normalize_mode="max"):
+        self._data.x = normalize_(self._data.x, dim=0, mode=normalize_mode)
+
+    def init_loaders(self, train_per=0.85, test_per=0.15, batch_size=32, n_hopes=2, **kwargs) -> None:
+        if train_per + test_per != 1.0:
+            valid_per = 1 - (train_per + test_per)
+        else:
+            valid_per = 0.0
+        self.train_idx = int(self.num_gsamples * train_per)
+        self.n_train = self.train_idx
+        self.n_valid = int(self.num_gsamples * valid_per)
+        self.test_idx = self.train_idx + self.n_valid
+        self.n_test = self.num_gsamples - self.test_idx
+        self.train_ds = SubgraphSet(
+            deepcopy(self._data.subgraph(torch.arange(self.train_idx))),
+            n_hopes = n_hopes
+            )
+        self.val_ds = SubgraphSet(
+            deepcopy(self._data.subgraph(torch.arange(self.train_idx, self.test_idx))),
+            n_hopes = n_hopes
+            )
+        self.test_ds = SubgraphSet(
+            deepcopy(self._data.subgraph(torch.arange(self.test_idx, self.num_nsamples))),
+            n_hopes = n_hopes
+            )
+        def my_collate(batch):
+            g_list = []
+            for g in batch:
+                g_list.extend(g)
+            g_batch = Batch.from_data_list(g_list)
+            return g_batch
+        self.train_loader = DataLoader(self.train_ds, batch_size=batch_size, shuffle=True, collate_fn=my_collate)
+        self.valid_loader = DataLoader(self.val_ds, batch_size=batch_size, shuffle=False, collate_fn=my_collate)
+        self.test_loader = DataLoader(self.test_ds, batch_size=batch_size, shuffle=False, collate_fn=my_collate)
+
+
+def get_node_dataset(
+        ds_name,
+        cov_scale = 2,
+        mean_shift = 0,
+        train_per = 0.85,
+        test_per = 0.15,
+        batch_size = 32,
+        n_hopes = 2,
+        norm_mode = "max",
+        node_attributes = True,
+        visualize = False):
+    
+    """ Currently supported datasets: 
+        - Cora_ML
+    """
+    dataset = CitationFull(
+        root = 'data/Cora',
+        name = ds_name
+        )
+
+    ntotal_graphs = dataset._data.size(0)
+    perm = torch.randperm(ntotal_graphs)
+    s_perm = perm[:int(ntotal_graphs*0.5)]
+    t_perm = perm[int(ntotal_graphs*0.5):]
+    s_data = deepcopy(dataset._data.subgraph(s_perm))
+    t_data = deepcopy(dataset._data.subgraph(t_perm))
+    s_dataset = NodeToGraphDataset(
+        s_data, 
+        normalize = True, 
+        shuffle = False, 
+        normalize_mode = norm_mode
+        )
+    s_dataset.init_loaders(
+        train_per = train_per, 
+        test_per = test_per, 
+        batch_size = batch_size, 
+        n_hopes = n_hopes
+        )
+    t_dataset = NodeToGraphDataset(
+        t_data, 
+        normalize = False, 
+        shuffle = False
+        )
+    mean = np.ones(t_dataset.n_feats) * mean_shift
+    cov_matrix = np.eye(t_dataset.n_feats) * cov_scale
+    t_dataset.add_multivariate_noise(mean, cov_matrix)
+    t_dataset.normalize_feats(normalize_mode = norm_mode)
+    t_dataset.init_loaders(
+        train_per = train_per, 
+        test_per = test_per, 
+        batch_size = batch_size, 
+        n_hopes = n_hopes
+        )
 
     if visualize:
         s_dataset.visualize("/content/CPrompt/tsne_source.png")
