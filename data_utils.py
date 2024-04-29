@@ -1,10 +1,12 @@
 import torch, random, os
 import numpy as np
-from torch_geometric.datasets import QM9, TUDataset, CitationFull
+from torch_geometric.datasets import QM9, TUDataset, CitationFull, Planetoid
 from utils import *
 from model import *
 import pandas as pd
 from torch_geometric.loader import DataLoader as PyG_Dataloader
+from torch_geometric.data import Data, Batch, Dataset as PyG_Dataset
+from torch_geometric.utils import k_hop_subgraph, subgraph
 from torch_geometric.loader import NeighborLoader
 from torch.utils.data import Dataset
 from sklearn.datasets import make_spd_matrix
@@ -588,7 +590,7 @@ class SubgraphSet(Dataset):
 
             current_hop = 2
             subset, _, _, _ = k_hop_subgraph(
-                node_idx=index, num_hops=current_hop, edge_index = self._data.edge_index, 
+                node_idx=index, num_hops=current_hop, edge_index = self._data.edge_index,
                 num_nodes = self._data.x.size(0), relabel_nodes = True
                 )
 
@@ -596,13 +598,13 @@ class SubgraphSet(Dataset):
                 current_hop += 1
                 subset, _, _, _ = k_hop_subgraph(
                     node_idx = index, num_hops=current_hop,
-                    edge_index = self._data.edge_index, 
+                    edge_index = self._data.edge_index,
                     num_nodes = self._data.x.size(0), relabel_nodes = True
                     )
 
             if len(subset) < smallest_size:
                 need_node_num = smallest_size - len(subset)
-                pos_nodes = torch.argwhere(self._data.y == int(current_label)) 
+                pos_nodes = torch.argwhere(self._data.y == int(current_label))
                 candidate_nodes = torch.from_numpy(np.setdiff1d(pos_nodes.numpy(), subset.numpy()))
                 candidate_nodes = candidate_nodes[torch.randperm(candidate_nodes.size(0))][:need_node_num]
                 subset = torch.cat([torch.flatten(subset), torch.flatten(candidate_nodes)])
@@ -675,37 +677,50 @@ class NodeToGraphDataset(GDataset):
     def normalize_feats(self, normalize_mode="max"):
         self._data.x = normalize_(self._data.x, dim=0, mode=normalize_mode)
 
-    def init_loaders(self, train_per=0.85, test_per=0.15, batch_size=32, n_hopes=2, **kwargs) -> None:
-        if train_per + test_per != 1.0:
-            valid_per = 1 - (train_per + test_per)
-        else:
-            valid_per = 0.0
-        self.train_idx = int(self.num_gsamples * train_per)
-        self.n_train = self.train_idx
-        self.n_valid = int(self.num_gsamples * valid_per)
-        self.test_idx = self.train_idx + self.n_valid
-        self.n_test = self.num_gsamples - self.test_idx
-        self.train_ds = SubgraphSet(
-            deepcopy(self._data.subgraph(torch.arange(self.train_idx))),
-            n_hopes = n_hopes
-            )
-        self.val_ds = SubgraphSet(
-            deepcopy(self._data.subgraph(torch.arange(self.train_idx, self.test_idx))),
-            n_hopes = n_hopes
-            )
-        self.test_ds = SubgraphSet(
-            deepcopy(self._data.subgraph(torch.arange(self.test_idx, self.num_nsamples))),
-            n_hopes = n_hopes
-            )
-        def my_collate(batch):
-            g_list = []
-            for g in batch:
-                g_list.extend(g)
-            g_batch = Batch.from_data_list(g_list)
-            return g_batch
-        self.train_loader = DataLoader(self.train_ds, batch_size=batch_size, shuffle=True, collate_fn=my_collate)
-        self.valid_loader = DataLoader(self.val_ds, batch_size=batch_size, shuffle=False, collate_fn=my_collate)
-        self.test_loader = DataLoader(self.test_ds, batch_size=batch_size, shuffle=False, collate_fn=my_collate)
+    def init_loaders(
+            self,
+            train_idxs: torch.Tensor = None,
+            valid_idxs: torch.Tensor = None,
+            test_idxs: torch.Tensor = None,
+            train_test_split=[0.85, 0.15],
+            batch_size=32,
+            n_hopes=2, **kwargs) -> None:
+            if (train_idxs is not None) and (valid_idxs is not None) and (test_idxs is not None):
+                self.n_train = train_idxs.size(0)
+                self.n_valid = valid_idxs.size(0)
+                self.n_test = test_idxs.size(0)
+            else:
+                if train_test_split[0] + train_test_split[1] != 1.0:
+                    valid_per = 1 - (train_test_split[0] + train_test_split[1])
+                else:
+                    valid_per = 0.0
+                self.n_train = int(self.num_gsamples * train_test_split[0])
+                self.n_valid = int(self.num_gsamples * valid_per)
+                self.n_test = self.num_gsamples - (self.n_train + self.n_valid)
+            self.train_idxs = torch.arange(self.n_train)
+            self.valid_idxs = torch.arange(self.n_train, self.n_train + self.n_valid)
+            self.test_idxs = torch.arange(self.n_train + self.n_valid, self.n_train + self.n_valid + self.n_test)
+            self.train_ds = SubgraphSet(
+                deepcopy(self._data.subgraph(self.train_idxs)),
+                n_hopes = n_hopes
+                )
+            self.valid_ds = SubgraphSet(
+                deepcopy(self._data.subgraph(self.valid_idxs)),
+                n_hopes = n_hopes
+                )
+            self.test_ds = SubgraphSet(
+                deepcopy(self._data.subgraph(self.test_idxs)),
+                n_hopes = n_hopes
+                )
+            def my_collate(batch):
+                g_list = []
+                for g in batch:
+                    g_list.extend(g)
+                g_batch = Batch.from_data_list(g_list)
+                return g_batch
+            self.train_loader = DataLoader(self.train_ds, batch_size=batch_size, shuffle=True, collate_fn=my_collate)
+            self.valid_loader = DataLoader(self.valid_ds, batch_size=batch_size, shuffle=False, collate_fn=my_collate)
+            self.test_loader = DataLoader(self.test_ds, batch_size=batch_size, shuffle=False, collate_fn=my_collate)
 
 
 def get_node_dataset(
@@ -719,36 +734,59 @@ def get_node_dataset(
         norm_mode = "max",
         node_attributes = True,
         visualize = False):
-    
-    """ Currently supported datasets: 
-        - Cora_ML
+
+    """ Currently supported datasets:
+        - Cora_
     """
-    dataset = CitationFull(
+    dataset = Planetoid(
         root = 'data/Cora',
         name = ds_name
         )
 
     ntotal_graphs = dataset._data.size(0)
-    perm = torch.randperm(ntotal_graphs)
-    s_perm = perm[:int(ntotal_graphs*0.5)]
-    t_perm = perm[int(ntotal_graphs*0.5):]
+    train_idxs = torch.nonzero(dataset._data.train_mask).view(-1)
+    valid_idxs = torch.nonzero(dataset._data.val_mask).view(-1)
+    test_idxs = torch.nonzero(dataset._data.test_mask).view(-1)
+    other_mask = ~dataset._data.train_mask.logical_or(dataset._data.val_mask).logical_or(dataset._data.test_mask)
+    other_idxs = torch.nonzero(other_mask).view(-1)
+    n_train = train_idxs.size(0)
+    n_val = valid_idxs.size(0)
+    n_test = test_idxs.size(0)
+    n_other = other_idxs.size(0)
+    train_perm = torch.randperm(n_train)
+    valid_perm = torch.randperm(n_val)
+    test_perm = torch.randperm(n_test)
+    other_perm = torch.randperm(n_other)
+    s_perm = torch.cat([
+        train_idxs[train_perm[:n_train//2]],
+        valid_idxs[valid_perm[:n_val//2]],
+        test_idxs[test_perm[:n_test//2]],
+        other_idxs[other_perm[:n_other//2]],
+        ])
+    t_perm = torch.cat([
+        train_idxs[train_perm[n_train//2:]],
+        valid_idxs[valid_perm[n_val//2:]],
+        test_idxs[test_perm[n_test//2:]],
+        other_idxs[other_perm[n_other//2:]],
+        ])
     s_data = deepcopy(dataset._data.subgraph(s_perm))
     t_data = deepcopy(dataset._data.subgraph(t_perm))
     s_dataset = NodeToGraphDataset(
-        s_data, 
-        normalize = True, 
-        shuffle = False, 
+        s_data,
+        normalize = True,
+        shuffle = False,
         normalize_mode = norm_mode
         )
     s_dataset.init_loaders(
-        train_per = train_per, 
-        test_per = test_per, 
-        batch_size = batch_size, 
+        train_idxs = train_idxs[train_perm[:n_train//2]],
+        valid_idxs = valid_idxs[valid_perm[:n_val//2]],
+        test_idxs = test_idxs[test_perm[:n_test//2]],
+        batch_size = batch_size,
         n_hopes = n_hopes
         )
     t_dataset = NodeToGraphDataset(
-        t_data, 
-        normalize = False, 
+        t_data,
+        normalize = False,
         shuffle = False
         )
     mean = np.ones(t_dataset.n_feats) * mean_shift
@@ -756,9 +794,10 @@ def get_node_dataset(
     t_dataset.add_multivariate_noise(mean, cov_matrix)
     t_dataset.normalize_feats(normalize_mode = norm_mode)
     t_dataset.init_loaders(
-        train_per = train_per, 
-        test_per = test_per, 
-        batch_size = batch_size, 
+        train_idxs = train_idxs[train_perm[n_train//2:]],
+        valid_idxs = valid_idxs[valid_perm[n_val//2:]],
+        test_idxs = test_idxs[test_perm[n_test//2:]],
+        batch_size = batch_size,
         n_hopes = n_hopes
         )
 
