@@ -11,12 +11,26 @@ from data_utils import make_datasets
 from utils import *
 
 
-s_dataset, t_dataset = get_dataset(
-    "ENZYMES",
-    cov_scale = 2,
-    mean_shift = 20.,
+# s_dataset, t_dataset = get_graph_dataset(
+#     "ENZYMES",
+#     cov_scale = 2,
+#     mean_shift = 10.,
+#     train_per = 0.80,
+#     test_per = 0.20,
+#     batch_size = 32,
+#     norm_mode = "max",
+#     node_attributes = True,
+#     visualize = False
+# )
+
+s_dataset, t_dataset = get_node_dataset(
+    "Cora",
+    cov_scale = 0.1,
+    mean_shift = 0.,
     train_per = 0.80,
     test_per = 0.20,
+    batch_size = 32,
+    n_hopes = 2,
     norm_mode = "max",
     node_attributes = True,
     visualize = False
@@ -32,8 +46,13 @@ if visualize:
         for i in range(s_dataset.y.unique().size(0))])
 else:
     colors = None
-
-model = GCN(s_dataset.n_feats, h_dim, nclass=s_dataset.num_gclass, dropout=0.2)
+model = PretrainedModel(
+    d_feat = s_dataset.n_feats,
+    d_hid = h_dim,
+    d_class = s_dataset.num_gclass,
+    n_layers = 2,
+    r_dropout = 0.2
+    )
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 model.to(device)
 # for d in train_loader:
@@ -42,24 +61,32 @@ obj_fun = nn.CrossEntropyLoss()
 optimizer = Adam(model.parameters(), lr=1e-2)
 scheduler = StepLR(optimizer, step_size=100, gamma=0.5)
 
-n_epochs = 150
+with torch.no_grad():
+    model.eval()
+    test_loss, test_acc = test(model, s_dataset, device, mode = "pretrain")
+    print(f'Main Loss on Pretrained GNN: {test_loss:.4f}, Main ACC: {test_acc:.3f}')
+
+n_epochs = 200
 for epoch in range(n_epochs):
     model.train()
     # s_dataset._shuffle()
     for i, batch in enumerate(s_dataset.train_loader):
-        print(f"Train batch: {i}/{s_dataset.train_idx}", end='\r')
+        print(f"Train batch: {i}/{s_dataset.n_train}", end='\r')
         # train_batch, train_labels = s_dataset[i:min(i+batch_size, s_dataset.train_idx)]
-        x_adj_list = batch_to_xadj_list(batch.to_data_list(), device)
+        # x_adj_list = batch_to_xadj_list(batch.to_data_list(), device)
         optimizer.zero_grad()
-        emb_out, _ = model(x_adj_list)
-        loss = obj_fun(emb_out, batch.y.to(device))
+        scores, _ = model(
+            batch,
+            decoder = True,
+            device = device
+        )
+        loss = obj_fun(scores, batch.y.to(device))
         loss.backward()
         optimizer.step()
     scheduler.step()
     optimizer.zero_grad()
     with torch.no_grad():
-        test_loss, test_acc = test(
-            model, s_dataset, device, epoch, visualize, colors, "pretrain")
+        test_loss, test_acc = test(model, s_dataset, device, mode = "pretrain")
         print(f'Epoch: {epoch}/{n_epochs}, Train Loss: {loss:.4f}, Main Loss: {test_loss:.4f}, Main ACC: {test_acc:.3f}')
 
 !rm -f /content/CPrompt/pretrained/*

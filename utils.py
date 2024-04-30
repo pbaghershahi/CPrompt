@@ -163,25 +163,19 @@ def aug_graph(org_graph, aug_prob, aug_type="link", mode="drop"):
             x[perm] = .0
     return org_graph
 
-def test(
-        model, dataset, device, epoch=None, visualize=False,
-        colors=None, mode="prompt", pmodel=None):
+def test(model, dataset, device, mode="prompt", pmodel=None):
     model.eval()
     test_loss, correct = 0, 0
     for i, batch in enumerate(dataset.test_loader):
         print("Test batch:", "@"*25, f"{i}/{len(dataset.test_loader)}", "@"*25, end='\r')
         labels = batch.y.to(device)
-        batch = batch.to_data_list()
         if mode == "prompt":
-            batch = [g.to(device) for g in batch]
-            batch = pmodel(batch)
-        x_adj_list = batch_to_xadj_list(batch, device)
-        test_out, embeds = model(x_adj_list)
-        if visualize:
-            visualize_and_save_tsne(
-                embeds.cpu().detach().numpy(),
-                colors[labels.cpu()] if colors is not None else None,
-                epoch if epoch is not None else 0)
+            batch = pmodel(batch, device)
+        test_out, embeds = model(
+            batch,
+            decoder = True,
+            device = device
+            )
         test_loss += F.cross_entropy(test_out, labels, reduction="sum")
         test_out = F.softmax(test_out, dim=1)
         test_pred = test_out.max(dim=1)[1]

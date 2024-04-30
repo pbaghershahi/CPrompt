@@ -3,82 +3,50 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 import matplotlib.pyplot as plt
-from torch_geometric.data import Data
-from torch_geometric.nn import GCNConv
+from torch_geometric.data import Data, Batch
+from torch_geometric.nn import GCNConv, GCN, global_mean_pool
+from typing import List
 from utils import *
 
-class GCN(nn.Module):
-    def __init__(self, nfeat, nhid, nclass, dropout):
-        super(GCN, self).__init__()
-        self.gc1 = GraphConvolution(nfeat, nhid)
-        self.gc2 = GraphConvolution(nhid, nhid)
-        self.bn1 = nn.BatchNorm1d(nhid)
-        self.bn2 = nn.BatchNorm1d(nhid)
-        self.head = nn.Linear(nhid, nclass)
-        self.dropout = dropout
 
-    def forward(self, x_adj_list, decoder=True):
+class PretrainedModel(nn.Module):
+    def __init__(self, d_feat, d_hid, d_class, n_layers, r_dropout, *args, **kwargs) -> None:
+        super(PretrainedModel, self).__init__(*args, **kwargs)
+        self.gnn_modul = GCN(
+            in_channels = d_feat,
+            hidden_channels = d_hid,
+            num_layers = n_layers,
+            out_channels = d_hid,
+            dropout = .2,
+            act = "relu",
+            norm = None
+        )
+        self.r_dropout = r_dropout
+        self.decoder = nn.Linear(d_hid, d_class)
+
+    def forward(self, graph_batch: Batch, decoder = True, device = None):
+        if not isinstance(graph_batch, Batch):
+            graph_batch = Batch.from_data_list(graph_batch)
+        if device is not None:
+            graph_batch = graph_batch.to(device)
         if not decoder:
-            scores = scores = self.head(x_adj_list)
-            return scores, ""
-        g_embeds = []
-        for i, (x, adj) in enumerate(x_adj_list):
-            x = self.gc1(x, adj)
-            x = F.relu(x)
-            x = F.dropout(x, self.dropout, training=self.training)
-            x = self.gc2(x, adj)
-            x = F.relu(x)
-            x = F.dropout(x, self.dropout, training=self.training)
-            g_embeds.append(x.mean(dim=0))
-        g_embeds = torch.stack(g_embeds)
-        scores = self.head(g_embeds)
-        return scores, g_embeds
+            scores = self.decoder(graph_batch)
+            return scores
+        x = self.gnn_modul(graph_batch.x, graph_batch.edge_index)
+        x = global_mean_pool(x, graph_batch.batch)
+        scores = self.decoder(F.dropout(x, p=self.r_dropout, training=self.training))
+        return scores, x
 
 
-class GraphConvolution(nn.Module):
-
-    def __init__(self, in_features, out_features, bias=True):
-        super(GraphConvolution, self).__init__()
-        self.in_features = in_features
-        self.out_features = out_features
-        self.weight = nn.Parameter(torch.FloatTensor(in_features, out_features))
-        if bias:
-            self.bias = nn.Parameter(torch.FloatTensor(out_features))
-        else:
-            self.register_parameter('bias', None)
-        self.reset_parameters()
-
-    def reset_parameters(self):
-        stdv = 1. / np.sqrt(self.weight.size(1))
-        self.weight.data.uniform_(-stdv, stdv)
-        if self.bias is not None:
-            self.bias.data.uniform_(-stdv, stdv)
-
-    def forward(self, input_x, adj):
-        support = torch.mm(input_x, self.weight)
-        output = torch.sparse.mm(adj, support)
-        if self.bias is not None:
-            return output + self.bias
-        else:
-            return output
-
-    def __repr__(self):
-        return self.__class__.__name__ + ' (' \
-               + str(self.in_features) + ' -> ' \
-               + str(self.out_features) + ')'
-
-
-class LinkPredictionPrompt(nn.Module):
+class BasePrompt(nn.Module):
     def __init__(self,
                  emb_dim,
                  h_dim,
                  output_dim,
                  prompt_fn = "trans_x",
-                 token_num = 30,
-                 device="cuda:0") -> None:
-        super(LinkPredictionPrompt, self).__init__()
+                 token_num = 30) -> None:
+        super(BasePrompt, self).__init__()
         self.dropout = 0.2
-        self.device = torch.device(device)
         self.head = nn.Linear(h_dim, output_dim)
         if prompt_fn == "trans_x":
             self.linear1 = nn.Linear(emb_dim, h_dim)
@@ -156,8 +124,16 @@ class LinkPredictionPrompt(nn.Module):
             graph.x = emb_out
         return graphs
 
-    def forward(self, graphs):
-        return self.prompt(graphs)
+    def forward(self, graphs, device = None):
+        if isinstance(graphs, Batch):
+            graphs = graphs.to_data_list()
+        if device is not None:
+            graphs = [graph.to(device) for graph in graphs]
+        graphs = self.prompt(graphs)
+        if not isinstance(graphs, Batch):
+            assert isinstance(graphs, List)
+            graphs = Batch.from_data_list(graphs)
+        return graphs
     
 
 class HeavyPrompt(nn.Module):
@@ -180,13 +156,15 @@ class HeavyPrompt(nn.Module):
         pg = Data(x=self.token_embeds, edge_index=edge_index, y=torch.tensor([0]).long())
         return pg
 
-    def forward(self, graph_batch):
-        # pg = self.inner_structure_update()
+    def forward(self, graph_batch, device = None):
+        if isinstance(graph_batch, Batch):
+            graph_batch = graph_batch.to_data_list()
+        if device is not None:
+            graph_batch = [graph.to(device) for graph in graph_batch]
         self.pg.to(graph_batch[0].x.device)
         inner_edge_index = self.pg.edge_index
         token_num = self.pg.x.shape[0]
-
-        re_graph_list = []
+        re_graph_batch = []
         for g in graph_batch:
             if self.trans_x:
                 x = F.relu(self.linear1(g.x))
@@ -204,8 +182,11 @@ class HeavyPrompt(nn.Module):
                 edge_index = torch.cat([inner_edge_index, g_edge_index, cross_edge_index], dim=1)
             y = g.y
             data = Data(x=x, edge_index=edge_index, y=y)
-            re_graph_list.append(data)
-        return re_graph_list
+            re_graph_batch.append(data)
+        if not isinstance(re_graph_batch, Batch):
+            assert isinstance(re_graph_batch, List)
+            re_graph_batch = Batch.from_data_list(re_graph_batch)
+        return re_graph_batch
 
     """ Peyman: this function consideres the case where we have a task header or decoder.
     so in this case they don't multiply the representation matrix of the prompt graph
@@ -250,3 +231,64 @@ class HeavyPrompt(nn.Module):
             self.optimizer.step()
             total_loss += loss.item()
         return total_loss / len(train_loader)
+    
+
+class OrgGCN(nn.Module):
+    def __init__(self, nfeat, nhid, nclass, dropout):
+        super(OrgGCN, self).__init__()
+        self.gc1 = OrgGraphConvolution(nfeat, nhid)
+        self.gc2 = OrgGraphConvolution(nhid, nhid)
+        self.bn1 = nn.BatchNorm1d(nhid)
+        self.bn2 = nn.BatchNorm1d(nhid)
+        self.head = nn.Linear(nhid, nclass)
+        self.dropout = dropout
+
+    def forward(self, x_adj_list, decoder=True):
+        if not decoder:
+            scores = scores = self.head(x_adj_list)
+            return scores, ""
+        g_embeds = []
+        for i, (x, adj) in enumerate(x_adj_list):
+            x = self.gc1(x, adj)
+            x = F.relu(x)
+            x = F.dropout(x, self.dropout, training=self.training)
+            x = self.gc2(x, adj)
+            x = F.relu(x)
+            x = F.dropout(x, self.dropout, training=self.training)
+            g_embeds.append(x.mean(dim=0))
+        g_embeds = torch.stack(g_embeds)
+        scores = self.head(g_embeds)
+        return scores, g_embeds
+
+
+class OrgGraphConvolution(nn.Module):
+
+    def __init__(self, in_features, out_features, bias=True):
+        super(OrgGraphConvolution, self).__init__()
+        self.in_features = in_features
+        self.out_features = out_features
+        self.weight = nn.Parameter(torch.FloatTensor(in_features, out_features))
+        if bias:
+            self.bias = nn.Parameter(torch.FloatTensor(out_features))
+        else:
+            self.register_parameter('bias', None)
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        stdv = 1. / np.sqrt(self.weight.size(1))
+        self.weight.data.uniform_(-stdv, stdv)
+        if self.bias is not None:
+            self.bias.data.uniform_(-stdv, stdv)
+
+    def forward(self, input_x, adj):
+        support = torch.mm(input_x, self.weight)
+        output = torch.sparse.mm(adj, support)
+        if self.bias is not None:
+            return output + self.bias
+        else:
+            return output
+
+    def __repr__(self):
+        return self.__class__.__name__ + ' (' \
+               + str(self.in_features) + ' -> ' \
+               + str(self.out_features) + ')'
