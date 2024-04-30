@@ -8,7 +8,7 @@ from torch_geometric.loader import DataLoader as PyG_Dataloader
 from torch_geometric.data import Data, Batch, Dataset as PyG_Dataset
 from torch_geometric.utils import k_hop_subgraph, subgraph
 from torch_geometric.loader import NeighborLoader
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader
 from sklearn.datasets import make_spd_matrix
 from sklearn.mixture import GaussianMixture
 from collections import OrderedDict
