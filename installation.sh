@@ -6,4 +6,6 @@ pytorch_version="torch-${pytorch_version}.html"
 pip install --no-index pyg_lib torch-scatter torch-sparse \
 torch-cluster torch-spline-conv -f https://pytorch-geometric.com/whl/$pytorch_version
 pip install torch-geometric
+pip install torcheval
+pip install ipdb
 printf "\033c"

@@ -14,6 +14,9 @@ from sklearn.mixture import GaussianMixture
 from collections import OrderedDict
 from typing import List
 from copy import deepcopy
+from sklearn.utils import shuffle as sk_shuffl
+import ipdb
+import gc
 # dataset = CitationFull(
 #     root='data/Cora',
 #     name='Cora_ML'
@@ -721,6 +724,212 @@ class NodeToGraphDataset(GDataset):
             self.train_loader = DataLoader(self.train_ds, batch_size=batch_size, shuffle=True, collate_fn=my_collate)
             self.valid_loader = DataLoader(self.valid_ds, batch_size=batch_size, shuffle=False, collate_fn=my_collate)
             self.test_loader = DataLoader(self.test_ds, batch_size=batch_size, shuffle=False, collate_fn=my_collate)
+
+
+def load_w2v_feature(file, max_idx=0):
+    with open(file, "rb") as f:
+        nu = 0
+        for line in f:
+            content = line.strip().split()
+            nu += 1
+            if nu == 1:
+                n, d = int(content[0]), int(content[1])
+                feature = [[0.] * d for i in range(max(n, max_idx + 1))]
+                continue
+            index = int(content[0])
+            while len(feature) <= index:
+                feature.append([0.] * d)
+            for i, x in enumerate(content[1:]):
+                feature[index][i] = float(x)
+    for item in feature:
+        assert len(item) == d
+    return np.array(feature, dtype=np.float32)
+
+
+class SubsetSampler(Sampler):
+    def __init__(self, indices):
+        self.indices = indices
+
+    def __iter__(self):
+        return iter(self.indices)
+
+    def __len__(self):
+        return len(self.indices)
+
+
+class SubsetRandomSampler(SubsetSampler):
+    def __init__(self, indices):
+        self.indices = indices
+
+    def __iter__(self):
+        return (self.indices[i] for i in torch.randperm(len(self.indices)))
+
+
+class InfluenceDataSet(Dataset):
+    def __init__(self, file_dir, shuffle):
+        adj_matrices = np.load(os.path.join(file_dir, "adjacency_matrix.npy")).astype(np.int8)
+        # self-loop trick, the input adj_matrices should have no self-loop
+        # identity = np.identity(adj_matrices.shape[1])
+        # adj_matrices += identity
+        # adj_matrices[adj_matrices != 0] = 1.0
+        # ipdb.set_trace()
+        influence_features = np.load(os.path.join(file_dir, "influence_feature.npy")).astype(np.float32)
+        labels = np.load(os.path.join(file_dir, "label.npy"))
+        vertices = np.load(os.path.join(file_dir, "vertex_id.npy"))
+        embedding = load_w2v_feature(os.path.join(file_dir, "deepwalk.emb_64"), vertices.max())
+        vertex_features = np.load(os.path.join(file_dir, "vertex_feature.npy"))
+        # vertex_features = preprocessing.scale(vertex_features)
+        if shuffle:
+            adj_matrices, influence_features, labels, vertices = sk_shuffl(
+                adj_matrices, influence_features,
+                labels, vertices,
+                random_state = 2728
+                )
+        self.vertices = torch.as_tensor(vertices, dtype=torch.int)
+        self.adj_matrices = torch.as_tensor(adj_matrices, dtype=torch.int8)
+        self.labels = torch.as_tensor(labels, dtype=torch.int64)
+        self.vertex_features = torch.as_tensor(vertex_features, dtype=torch.float)
+        self.influence_features = torch.as_tensor(influence_features, dtype=torch.float)
+        self.embedding = torch.as_tensor(embedding, dtype=torch.float)
+
+    def __len__(self):
+        return self.adj_matrices.size(0)
+
+    def __getitem__(self, idx):
+        node_ids = self.vertices[idx]
+        x = torch.cat([
+            self.embedding[node_ids],
+            self.vertex_features[node_ids],
+            self.influence_features[idx]
+            ], dim=-1)
+        edges, edge_attrs = dense_to_sparse(self.adj_matrices[idx])
+        y = self.labels[idx]
+        return Data(x=x, edge_index=edges, y=y)
+
+
+class EgoNetworkDataset(GDataset):
+    def __init__(self,
+                 ds_path,
+                 shuffle = False,
+                 **kwargs) -> None:
+        super(EgoNetworkDataset, self).__init__()
+        self._data = InfluenceDataSet(ds_path, shuffle)
+        self.num_nsamples = self._data.vertex_features.size(0)
+        self.num_nclass = self._data.labels.unique().size(0)
+        self.num_gclass = self.num_nclass
+        self.num_gsamples = self._data.adj_matrices.size(0)
+        class_weight = self.num_gsamples / (self.num_gclass * torch.bincount(self._data.labels))
+        self.class_weight = torch.as_tensor(class_weight, dtype=torch.float)
+
+    @property
+    def n_feats(self,):
+        return self._data.influence_features.size(-1) + self._data.embedding.size(-1) + self._data.vertex_features.size(-1)
+
+    def normalize_feats(self, normalize_mode="max", **kwargs):
+        self._data.embedding[kwargs["train_idxs"], :] = normalize_(
+            self._data.embedding[kwargs["train_idxs"], :],
+            dim=0, mode=normalize_mode)
+        self._data.vertex_features[kwargs["train_idxs"], :] = normalize_(
+            self._data.vertex_features[kwargs["train_idxs"], :],
+            dim=0, mode=normalize_mode)
+
+        if kwargs["valid_idxs"].size(0) > 0:
+            self._data.embedding[kwargs["valid_idxs"], :] = normalize_(
+                self._data.embedding[kwargs["valid_idxs"], :],
+                dim=0, mode=normalize_mode)
+            self._data.vertex_features[kwargs["valid_idxs"], :] = normalize_(
+                self._data.vertex_features[kwargs["valid_idxs"], :],
+                dim=0, mode=normalize_mode)
+        if kwargs["valid_idxs"].size(0) > 0:
+            self._data.embedding[kwargs["test_idxs"], :] = normalize_(
+                self._data.embedding[kwargs["test_idxs"], :],
+                dim=0, mode=normalize_mode)
+            self._data.vertex_features[kwargs["test_idxs"], :] = normalize_(
+                self._data.vertex_features[kwargs["test_idxs"], :],
+                dim=0, mode=normalize_mode)
+
+    def init_loaders(
+            self,
+            train_idxs: torch.Tensor = None,
+            valid_idxs: torch.Tensor = None,
+            test_idxs: torch.Tensor = None,
+            train_test_split=[0.85, 0.15],
+            batch_size=32,
+            **kwargs) -> None:
+        if (train_idxs is not None) and (valid_idxs is not None) and (test_idxs is not None):
+            self.n_train = train_idxs.size(0)
+            self.n_valid = valid_idxs.size(0)
+            self.n_test = test_idxs.size(0)
+        else:
+            if train_test_split[0] + train_test_split[1] != 1.0:
+                valid_per = 1 - (train_test_split[0] + train_test_split[1])
+            else:
+                valid_per = 0.0
+            self.n_train = int(self.num_gsamples * train_test_split[0])
+            self.n_valid = int(self.num_gsamples * valid_per)
+            self.n_test = self.num_gsamples - (self.n_train + self.n_valid)
+        self.train_idxs = torch.arange(self.n_train)
+        self.valid_idxs = torch.arange(self.n_train, self.n_train + self.n_valid)
+        self.test_idxs = torch.arange(self.n_train + self.n_valid, self.n_train + self.n_valid + self.n_test)
+        self.normalize_feats(
+            normalize_mode = "max",
+            train_idxs = self.train_idxs,
+            valid_idxs = self.valid_idxs,
+            test_idxs = self.test_idxs
+            )
+
+        def my_collate(batch):
+            if not isinstance(batch, List):
+                g_list = []
+                for g in batch:
+                    g_list.extend(g)
+            else:
+                g_list = batch
+            g_batch = Batch.from_data_list(g_list)
+            return g_batch
+
+        self.train_loader = DataLoader(
+            self._data,
+            batch_size = batch_size,
+            sampler = SubsetRandomSampler(self.train_idxs),
+            collate_fn = my_collate
+            )
+        self.valid_loader = DataLoader(
+            self._data,
+            batch_size = batch_size,
+            sampler = SubsetSampler(self.valid_idxs),
+            collate_fn = my_collate
+            )
+        self.test_loader = DataLoader(
+            self._data,
+            batch_size = batch_size,
+            sampler = SubsetSampler(self.test_idxs),
+            collate_fn = my_collate
+            )
+
+
+def get_gda_dataset(
+        ds_dir,
+        s_ds_name,
+        t_ds_name,
+        train_per = 0.85,
+        test_per = 0.15,
+        batch_size = 32,
+        ):
+    s_path = ds_dir + s_ds_name
+    s_dataset = EgoNetworkDataset(s_path, shuffle = True)
+    s_dataset.init_loaders(
+        train_test_split = [train_per, test_per],
+        batch_size = batch_size
+    )
+    gc.collect()
+    t_path = ds_dir + t_ds_name
+    t_dataset = EgoNetworkDataset(t_path, shuffle = True)
+    t_dataset.init_loaders(
+        train_test_split = [train_per, test_per],
+        batch_size = batch_size
+    )
+    return s_dataset, t_dataset
 
 
 def get_node_dataset(

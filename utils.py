@@ -6,6 +6,7 @@ from sklearn.manifold import TSNE
 from torch_geometric.utils import to_dense_adj, subgraph, remove_self_loops, coalesce
 from torch_geometric.data import Data
 from torch_geometric.loader import DataLoader
+from torcheval.metrics.functional import multiclass_f1_score
 
 
 def cal_entropy(input_):
@@ -166,24 +167,31 @@ def aug_graph(org_graph, aug_prob, aug_type="link", mode="drop"):
 def test(model, dataset, device, mode="prompt", pmodel=None):
     model.eval()
     test_loss, correct = 0, 0
+    labels = []
+    preds = []
     for i, batch in enumerate(dataset.test_loader):
         print("Test batch:", "@"*25, f"{i}/{len(dataset.test_loader)}", "@"*25, end='\r')
-        labels = batch.y.to(device)
+        temp_labels = batch.y.to(device)
         if mode == "prompt":
             batch = pmodel(batch, device)
-        test_out, embeds = model(
+        test_out, _ = model(
             batch,
             decoder = True,
             device = device
             )
-        test_loss += F.cross_entropy(test_out, labels, reduction="sum")
+        test_loss += F.cross_entropy(test_out, temp_labels, reduction="sum")
         test_out = F.softmax(test_out, dim=1)
-        test_pred = test_out.max(dim=1)[1]
-        correct += int((test_pred == labels).sum())
-        batch, labels, x_adj_list, test_out, embeds = 0, 0, 0, 0, 0
+        labels.append(temp_labels)
+        preds.append(test_out.argmax(dim=1))
+        batch, temp_labels, test_out = 0, 0, 0
+    labels = torch.cat(labels)
+    preds = torch.cat(preds)
     test_loss /= dataset.n_test
-    test_acc = correct / dataset.n_test
-    return test_loss, test_acc
+    test_acc = int((labels == preds).sum()) / dataset.n_test
+    test_f1 = multiclass_f1_score(
+        preds, labels, num_classes = dataset.num_gclass, average="micro"
+        )
+    return test_loss, test_acc, test_f1
 
 def get_subgraph(graph, node_indices):
     node_indices = np.sort(node_indices)

@@ -23,17 +23,26 @@ from utils import *
 #     visualize = False
 # )
 
-s_dataset, t_dataset = get_node_dataset(
-    "Cora",
-    cov_scale = 0.1,
-    mean_shift = 0.,
+# s_dataset, t_dataset = get_node_dataset(
+#     "Cora",
+#     cov_scale = 0.1,
+#     mean_shift = 0.,
+#     train_per = 0.80,
+#     test_per = 0.20,
+#     batch_size = 32,
+#     n_hopes = 2,
+#     norm_mode = "max",
+#     node_attributes = True,
+#     visualize = False
+# )
+
+s_dataset, t_dataset = get_gda_dataset(
+    ds_dir = "/content/CPrompt/data/",
+    s_ds_name = "oag",
+    t_ds_name = "digg",
     train_per = 0.80,
     test_per = 0.20,
     batch_size = 32,
-    n_hopes = 2,
-    norm_mode = "max",
-    node_attributes = True,
-    visualize = False
 )
 
 h_dim = 64
@@ -58,22 +67,20 @@ model.to(device)
 # for d in train_loader:
 #     d.to(device)
 obj_fun = nn.CrossEntropyLoss()
-optimizer = Adam(model.parameters(), lr=1e-2)
+optimizer = Adam(model.parameters(), lr=1e-3)
 scheduler = StepLR(optimizer, step_size=100, gamma=0.5)
 
 with torch.no_grad():
     model.eval()
-    test_loss, test_acc = test(model, s_dataset, device, mode = "pretrain")
-    print(f'Main Loss on Pretrained GNN: {test_loss:.4f}, Main ACC: {test_acc:.3f}')
+    # ipdb.set_trace()
+    test_loss, test_acc, test_f1 = test(model, s_dataset, device, mode = "pretrain")
+    print(f'Main Loss on Pretrained GNN: {test_loss:.4f}, Main ACC: {test_acc:.3f}, Main F1: {test_f1:.3f}')
 
-n_epochs = 200
+n_epochs = 50
 for epoch in range(n_epochs):
     model.train()
     # s_dataset._shuffle()
     for i, batch in enumerate(s_dataset.train_loader):
-        print(f"Train batch: {i}/{s_dataset.n_train}", end='\r')
-        # train_batch, train_labels = s_dataset[i:min(i+batch_size, s_dataset.train_idx)]
-        # x_adj_list = batch_to_xadj_list(batch.to_data_list(), device)
         optimizer.zero_grad()
         scores, _ = model(
             batch,
@@ -83,11 +90,14 @@ for epoch in range(n_epochs):
         loss = obj_fun(scores, batch.y.to(device))
         loss.backward()
         optimizer.step()
+        if i % 100 == 0:
+            print(f"Train batch: {i}/{s_dataset.n_train} | Loss: {loss.item()}")
     scheduler.step()
     optimizer.zero_grad()
-    with torch.no_grad():
-        test_loss, test_acc = test(model, s_dataset, device, mode = "pretrain")
-        print(f'Epoch: {epoch}/{n_epochs}, Train Loss: {loss:.4f}, Main Loss: {test_loss:.4f}, Main ACC: {test_acc:.3f}')
+    if (epoch+1) % 10 == 0:
+        with torch.no_grad():
+            test_loss, test_acc, test_f1 = test(model, s_dataset, device, mode = "pretrain")
+            print(f'Epoch: {epoch}/{n_epochs}, Train Loss: {loss:.4f}, Main Loss: {test_loss:.4f}, Main ACC: {test_acc:.3f}, Main F1: {test_f1:.3f}')
 
 !rm -f /content/CPrompt/pretrained/*
 save_model = True
