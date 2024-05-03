@@ -225,7 +225,7 @@ def add_multivariate_noise(input_feats, mean, cov_matrix, inplace=True):
         return input_feats.add_(noise)
     return input_feats + noise
 
-def dense_to_sparse(spmat):
+def _dense_to_sparse(spmat):
     indices = spmat.nonzero(as_tuple=False)
     spmat = torch.sparse_coo_tensor(
         indices.T,
@@ -245,7 +245,7 @@ def batch_to_xadj_list(g_batch, device):
         deg_mat_inv = deg_mat_inv.diag()
         adj_dense = deg_mat_inv @ adj_dense
         adj_dense.fill_diagonal_(1.)
-        adj_sparse = dense_to_sparse(adj_dense)
+        adj_sparse = _dense_to_sparse(adj_dense)
         x_adj_list.append((g.x, adj_sparse))
     return x_adj_list
 

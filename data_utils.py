@@ -6,9 +6,9 @@ from model import *
 import pandas as pd
 from torch_geometric.loader import DataLoader as PyG_Dataloader
 from torch_geometric.data import Data, Batch, Dataset as PyG_Dataset
-from torch_geometric.utils import k_hop_subgraph, subgraph
+from torch_geometric.utils import k_hop_subgraph, subgraph, dense_to_sparse
 from torch_geometric.loader import NeighborLoader
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader, Sampler
 from sklearn.datasets import make_spd_matrix
 from sklearn.mixture import GaussianMixture
 from collections import OrderedDict
@@ -802,7 +802,7 @@ class InfluenceDataSet(Dataset):
             self.vertex_features[node_ids],
             self.influence_features[idx]
             ], dim=-1)
-        edges, edge_attrs = dense_to_sparse(self.adj_matrices[idx])
+        edges, _ = dense_to_sparse(self.adj_matrices[idx])
         y = self.labels[idx]
         return Data(x=x, edge_index=edges, y=y)
 
