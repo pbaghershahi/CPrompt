@@ -1,6 +1,6 @@
 import torch, random, os
 import numpy as np
-from torch_geometric.datasets import QM9, TUDataset, CitationFull, Planetoidو Airports
+from torch_geometric.datasets import QM9, TUDataset, CitationFull, Planetoid, Airports
 from utils import *
 from model import *
 import pandas as pd
