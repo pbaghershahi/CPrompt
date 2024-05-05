@@ -7,7 +7,7 @@ from torch_geometric.utils import to_dense_adj, subgraph, remove_self_loops, coa
 from torch_geometric.data import Data
 from torch_geometric.loader import DataLoader
 from torcheval.metrics.functional import multiclass_f1_score
-
+from torchmetrics.classification import BinaryF1Score, MulticlassF1Score
 
 def cal_entropy(input_):
     entropy = -input_ * torch.log(input_ + 1e-8)
@@ -164,8 +164,9 @@ def aug_graph(org_graph, aug_prob, aug_type="link", mode="drop"):
             x[perm] = .0
     return org_graph
 
-def test(model, dataset, device, mode="prompt", pmodel=None):
+def test(model, dataset, device, task, mode, pmodel=None):
     model.eval()
+    f1 = BinaryF1Score() if task == "binary" else MulticlassF1Score(num_classes=dataset.num_gclass, average="micro")
     test_loss, correct = 0, 0
     labels = []
     preds = []
@@ -184,13 +185,12 @@ def test(model, dataset, device, mode="prompt", pmodel=None):
         labels.append(temp_labels)
         preds.append(test_out.argmax(dim=1))
         batch, temp_labels, test_out = 0, 0, 0
+    # ipdb.set_trace()
     labels = torch.cat(labels)
     preds = torch.cat(preds)
     test_loss /= dataset.n_test
     test_acc = int((labels == preds).sum()) / dataset.n_test
-    test_f1 = multiclass_f1_score(
-        preds, labels, num_classes = dataset.num_gclass, average="micro"
-        )
+    test_f1 = f1(preds.detach().cpu(), labels.detach().cpu())
     return test_loss, test_acc, test_f1
 
 def get_subgraph(graph, node_indices):
