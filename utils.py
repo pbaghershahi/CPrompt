@@ -48,6 +48,15 @@ def fix_seed(seed_value, random_lib=False, numpy_lib=False, torch_lib=False):
         if torch.cuda.is_available():
             torch.cuda.manual_seed_all(seed_value)
 
+def empty_directory(directory):
+    for root, dirs, files in os.walk(directory):
+        for file in files:
+            file_path = os.path.join(root, file)
+            os.remove(file_path)
+        for dir in dirs:
+            dir_path = os.path.join(root, dir)
+            os.rmdir(dir_path)
+            
 def cal_entropy(input_):
     entropy = -input_ * torch.log(input_ + 1e-8)
     entropy = torch.sum(entropy, dim=1)
@@ -204,32 +213,34 @@ def aug_graph(org_graph, aug_prob, aug_type="link", mode="drop"):
     return org_graph
 
 def test(model, dataset, device, task, mode, pmodel=None):
-    model.eval()
-    f1 = BinaryF1Score() if task == "binary" else MulticlassF1Score(num_classes=dataset.num_gclass, average="micro")
-    test_loss, correct = 0, 0
-    labels = []
-    preds = []
-    for i, batch in enumerate(dataset.test_loader):
-        print("Test batch:", "@"*25, f"{i}/{len(dataset.test_loader)}", "@"*25, end='\r')
-        temp_labels = batch.y.to(device)
-        if mode == "prompt":
-            batch = pmodel(batch, device)
-        test_out, _ = model(
-            batch,
-            decoder = True,
-            device = device
-            )
-        test_loss += F.cross_entropy(test_out, temp_labels, reduction="sum")
-        test_out = F.softmax(test_out, dim=1)
-        labels.append(temp_labels)
-        preds.append(test_out.argmax(dim=1))
-        batch, temp_labels, test_out = 0, 0, 0
-    # ipdb.set_trace()
-    labels = torch.cat(labels)
-    preds = torch.cat(preds)
-    test_loss /= dataset.n_test
-    test_acc = int((labels == preds).sum()) / dataset.n_test
-    test_f1 = f1(preds.detach().cpu(), labels.detach().cpu())
+    with torch.no_grad():
+        model.eval()
+        f1 = BinaryF1Score() if task == "binary" else MulticlassF1Score(num_classes=dataset.num_gclass, average="micro")
+        test_loss, correct = 0, 0
+        labels = []
+        preds = []
+        for i, batch in enumerate(dataset.test_loader):
+            print("Test batch:", "@"*25, f"{i}/{len(dataset.test_loader)}", "@"*25, end='\r')
+            temp_labels = batch.y.to(device)
+            if mode == "prompt":
+                pmodel.eval()
+                batch = pmodel(batch, device)
+            test_out, _ = model(
+                batch,
+                decoder = True,
+                device = device
+                )
+            test_loss += F.cross_entropy(test_out, temp_labels, reduction="sum")
+            test_out = F.softmax(test_out, dim=1)
+            labels.append(temp_labels)
+            preds.append(test_out.argmax(dim=1))
+            batch, temp_labels, test_out = 0, 0, 0
+        # ipdb.set_trace()
+        labels = torch.cat(labels)
+        preds = torch.cat(preds)
+        test_loss /= dataset.n_test
+        test_acc = int((labels == preds).sum()) / dataset.n_test
+        test_f1 = f1(preds.detach().cpu(), labels.detach().cpu())
     return test_loss, test_acc, test_f1
 
 def get_subgraph(graph, node_indices):
