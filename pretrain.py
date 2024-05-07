@@ -22,6 +22,7 @@ from utils import *
 #     node_attributes = True,
 #     visualize = False
 # )
+# task = "multi"
 
 # s_dataset, t_dataset = get_node_dataset(
 #     "Cora",
@@ -35,15 +36,43 @@ from utils import *
 #     node_attributes = True,
 #     visualize = False
 # )
+# task = "multi"
 
-s_dataset, t_dataset = get_gda_dataset(
-    ds_dir = "/content/CPrompt/data/",
-    s_ds_name = "oag",
-    t_ds_name = "digg",
-    train_per = 0.80,
-    test_per = 0.20,
-    batch_size = 32,
-)
+# s_dataset, t_dataset = get_gda_dataset(
+#     ds_dir = "./data/ego_network/",
+#     s_ds_name = "oag",
+#     t_ds_name = "digg",
+#     train_per = 0.80,
+#     test_per = 0.20,
+#     batch_size = 4096,
+# )
+# task = "binary"
+
+# s_dataset, t_dataset = get_pyggda_dataset(
+#     "Letter-low",
+#     "Letter-high",
+#     store_to_path = "./data/TUDataset",
+#     train_per = 0.80,
+#     test_per = 0.20,
+#     batch_size = 32,
+#     norm_mode = "max",
+#     node_attributes = True,
+# )
+# task = "multi"
+
+# s_dataset, t_dataset = get_pyg_node_gda_dataset(
+#     "USA",
+#     # "Brazil",
+#     "Europe",
+#     store_to_path = "./data/Airports",
+#     train_per = 0.80,
+#     test_per = 0.20,
+#     batch_size = 32,
+#     norm_mode = "max",
+#     n_hopes = 2,
+#     node_attributes = True,
+# )
+# task = "multi"
 
 h_dim = 64
 n_layers = 2

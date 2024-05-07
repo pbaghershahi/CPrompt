@@ -1,4 +1,4 @@
-import torch, random, os
+import torch, random, os, logging
 import torch.nn.functional as F
 import numpy as np
 import matplotlib.pyplot as plt
@@ -8,6 +8,45 @@ from torch_geometric.data import Data
 from torch_geometric.loader import DataLoader
 from torcheval.metrics.functional import multiclass_f1_score
 from torchmetrics.classification import BinaryF1Score, MulticlassF1Score
+
+def setup_logger(
+    name,
+    level=logging.DEBUG,
+    stream_handler=True,
+    file_handler=True,
+    log_file='default.log'
+    ):
+    open(log_file, 'w').close()
+    logger = logging.getLogger(name)
+    logger.setLevel(level)
+    formatter = logging.Formatter(
+        fmt='%(asctime)s [%(levelname)s] %(message)s',
+        datefmt='%Y-%m-%d,%H:%M:%S'
+        )
+
+    if stream_handler:
+        sth = logging.StreamHandler()
+        sth.setLevel(level)
+        sth.setFormatter(formatter)
+        logger.addHandler(sth)
+
+    if file_handler:
+        fh = logging.FileHandler(log_file)
+        fh.setLevel(level)
+        fh.setFormatter(formatter)
+        logger.addHandler(fh)
+
+    return logger
+
+def fix_seed(seed_value, random_lib=False, numpy_lib=False, torch_lib=False):
+    if random_lib:
+        random.seed(seed_value)
+    if numpy_lib:
+        np.random.seed(seed_value)
+    if torch_lib:
+        torch.manual_seed(seed_value)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(seed_value)
 
 def cal_entropy(input_):
     entropy = -input_ * torch.log(input_ + 1e-8)
