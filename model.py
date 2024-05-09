@@ -48,6 +48,7 @@ class BasePrompt(nn.Module):
         super(BasePrompt, self).__init__()
         self.dropout = 0.2
         self.head = nn.Linear(h_dim, output_dim)
+        self.prompt_fn = prompt_fn
         if prompt_fn == "trans_x":
             self.linear1 = nn.Linear(emb_dim, h_dim)
             self.prompt = self.trans_x
@@ -143,9 +144,10 @@ class HeavyPrompt(nn.Module):
         self.cross_prune = cross_prune
         self.token_embeds = torch.nn.Parameter(torch.empty(token_num, token_dim))
         torch.nn.init.kaiming_uniform_(self.token_embeds, nonlinearity='leaky_relu', mode='fan_in', a=0.01)
-        self.linear1 = nn.Linear(token_dim, token_dim*2)
-        self.linear2 = nn.Linear(token_dim*2, token_dim)
         self.trans_x = trans_x
+        if self.trans_x:
+            self.linear1 = nn.Linear(token_dim, token_dim*2)
+            self.linear2 = nn.Linear(token_dim*2, token_dim)
         self.pg = self.pg_construct()
 
     def pg_construct(self,):

@@ -8,4 +8,5 @@ torch-cluster torch-spline-conv -f https://pytorch-geometric.com/whl/$pytorch_ve
 pip install torch-geometric
 pip install torcheval
 pip install ipdb
+pip install gdown
 printf "\033c"

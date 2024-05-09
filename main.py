@@ -5,6 +5,12 @@ from data_utils import *
 import argparse
 
 def main(args):
+    print("here")
+    os.makedirs('./log', exist_ok=True)
+    exec_name = datetime.today().strftime('%Y-%m-%d-%H-%M')
+    log_file_path = "./log/"+exec_name+".log"
+    logger = setup_logger(name=exec_name, level=logging.INFO, log_file=log_file_path)
+
     s_dataset, t_dataset = get_node_dataset(
         "Cora",
         cov_scale = 0.1,
@@ -34,12 +40,13 @@ def main(args):
         n_epochs = 50
     )
 
-    pretrained_path = pretrain_model(
+    _, pretrained_path = pretrain_model(
         s_dataset,
         model_name, 
         model_config,
         optimizer_config,
         training_config,
+        logger,
         eval_step = 1,
         save_model = True, 
         pretext_task = "classification",
@@ -97,18 +104,19 @@ def main(args):
     else:
         raise Exception("The chosen method is not valid!")
     
-    prompting(
-            t_dataset,
-            args.prompt_method, 
-            prompt_config,
-            pretrained_config,
-            optimizer_config,
-            pretrained_path,
-            training_config,
-            s_dataset,
-            num_runs = 5,
-            eval_step = 1
-        )
+    _ = prompting(
+        t_dataset,
+        args.prompt_method, 
+        prompt_config,
+        pretrained_config,
+        optimizer_config,
+        pretrained_path,
+        training_config,
+        logger,
+        s_dataset,
+        num_runs = 5,
+        eval_step = 1
+    )
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='SAttLE')

@@ -1,4 +1,4 @@
-import torch, random, os
+import torch, random, os, ipdb
 import torch.nn as nn
 import torch.nn.functional as F
 from datetime import datetime
@@ -17,16 +17,13 @@ def pretrain_model(
     model_config,
     optimizer_config,
     training_config,
+    logger,
     eval_step = 1,
     save_model = True, 
     pretext_task = "classification",
     model_dir = "./pretrained"
 ):
     task = "multi" if s_dataset.num_gclass > 2 else "binary"
-    exec_name = datetime.today().strftime('%Y-%m-%d-%H-%M')
-    log_file_path = "./log/"+exec_name+".log"
-    logger = setup_logger(name=exec_name, level=logging.INFO, log_file=log_file_path)
-    
     if model_name == "GCN":
         model = PretrainedModel(**model_config)
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -72,6 +69,10 @@ def pretrain_model(
     if save_model:
         empty_directory(model_dir)
         os.makedirs(model_dir, exist_ok=True)
+        if isinstance(logger, logging.Logger):
+            exec_name = logger.handlers[1].baseFilename.split("/")[-1].split(".log")[0]
+        else:
+            exec_name = datetime.today().strftime('%Y-%m-%d-%H-%M')
         model_path = os.path.join(model_dir, f"{model_name}_Pretrained_{exec_name}.pth")
         torch.save(
             {
@@ -82,7 +83,7 @@ def pretrain_model(
         )
     else:
         model_path = "Won't be stored"
-    return model_path
+    return model, model_path
 
 
 class PromptTrainer():
@@ -137,6 +138,8 @@ class PromptTrainer():
         if self.training_config["add_link_loss"]:
             adj_labels = get_adj_labels(batch).to(device)
             loss += link_predict_loss(prompt_batch, adj_labels)
+        if self.training_config["r_reg"] > 0.0 and prompt_model.prompt_fn == "add_tokens":
+            loss += self.training_config["r_reg"] * prompt_model.token_embeds.pow(2).mean()
         return loss
 
     def pseudo_labeling(self, pretrained_model, prompt_model, batch, device):
@@ -183,13 +186,15 @@ class PromptTrainer():
             initc = initc / (1e-8 + ps_probs.sum(axis=0)[:,None])
             dd = cdist(ps_embds, initc, 'cosine')
             pred_label = dd.argmin(axis=1)
-        # ps_probs = torch.as_tensor(np.eye(prompt_out.size(1))[pred_label, :], device = device)
-        ps_probs = F.softmax(torch.as_tensor(1 - dd, device = device), dim=1)
+        ps_probs = torch.as_tensor(np.eye(prompt_out.size(1))[pred_label, :], device = device)
+        # ps_probs = F.softmax(torch.as_tensor(1 - dd, device = device), dim=1)
         loss = self.obj_fun(prompt_out, ps_probs)
         # softmax_out = F.softmax(prompt_out, dim=1)
         # loss += entropy_loss(softmax_out).mean()
         # b_softmax = softmax_out.mean(dim=0)
         # loss += torch.sum(b_softmax * torch.log(b_softmax + 1e-5))
+        if self.training_config["r_reg"] > 0.0 and prompt_model.prompt_fn == "add_tokens":
+            loss += self.training_config["r_reg"] * prompt_model.token_embeds.pow(2).mean()
         return loss
 
     def all_in_one(self, pretrained_model, prompt_model, batch, device):
@@ -200,12 +205,18 @@ class PromptTrainer():
             decoder = True,
             )
         loss = self.obj_fun(prompt_out, labels, reduction="mean")
+        if self.training_config["r_reg"] > 0.0 and not prompt_model.trans_x:
+            loss += self.training_config["r_reg"] * prompt_model.token_embeds.pow(2).mean()
         return loss
         
     def train(self, t_dataset, pretrained_model, prompt_model, optimizer, device, logger) -> None:
         for i, batch in enumerate(t_dataset.train_loader):
             optimizer.zero_grad()
             loss = self.train_func(pretrained_model, prompt_model, batch, device)
+            # ipdb.set_trace()
+            # for name, param in prompt_model.named_parameters():
+            #     if param.requires_grad:
+            #         print(name)
             loss.backward()
             optimizer.step()
             total_grad_norm = 0
@@ -221,16 +232,15 @@ def prompting(
     optimizer_config,
     pretrained_path,
     training_config,
+    logger,
     s_dataset = None,
     num_runs = 5,
     eval_step = 1
 ):
     task = "multi" if t_dataset.num_gclass > 2 else "binary"
     overal_acc = []
+    overal_f1 = []
     for _ in range(num_runs):
-        exec_name = datetime.today().strftime('%Y-%m-%d-%H-%M')
-        log_file_path = "./log/"+exec_name+".log"
-        logger = setup_logger(name=exec_name, level=logging.INFO, log_file=log_file_path)
     
         main_model = PretrainedModel(**pretrained_config)
         if prompt_method == "all_in_one":
@@ -258,6 +268,7 @@ def prompting(
         logger.info(f'Pretrained GNN on Target Dataset Without Prompting -- Loss: {test_loss:.4f} -- ACC: {test_acc:.3f} -- F1-score: {test_f1:.3f}')
     
         test_average_acc = []
+        test_average_f1 = []
         n_epochs = training_config["n_epochs"]
         for epoch in range(n_epochs):
             pmodel.train()
@@ -278,9 +289,14 @@ def prompting(
                 )
                 if epoch >= 125:
                     test_average_acc.append(test_acc)
+                    test_average_f1.append(test_f1)
                     
         test_average_acc = np.array(test_average_acc).mean()
-        logger.info(f"The average accuracy on test data is: {test_average_acc}")
+        test_average_f1 = np.array(test_average_f1).mean()
+        logger.info(f"Average -- ACC: {test_average_acc} -- F1-score: {test_average_f1}")
         overal_acc.append(test_average_acc)
+        overal_f1.append(test_average_f1)
     overal_acc = np.array(overal_acc).mean()
-    logger.info(f"Total after {num_runs} runs: {np.array(overal_acc).mean()}")
+    overal_f1 = np.array(overal_f1).mean()
+    logger.info(f"Average after {num_runs} runs -- ACC: {np.array(overal_acc).mean()} -- F1-score: {np.array(overal_f1).mean()}")
+    return pmodel

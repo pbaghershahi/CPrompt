@@ -9,6 +9,14 @@ from torch_geometric.loader import DataLoader
 from torcheval.metrics.functional import multiclass_f1_score
 from torchmetrics.classification import BinaryF1Score, MulticlassF1Score
 
+
+def cal_avg_num_nodes(dataset):
+    total_num_nodes = 0
+    for batch in dataset.train_loader:
+        total_num_nodes += batch.x.size(0)
+    avg_num_nodes = total_num_nodes / dataset.num_gsamples
+    return avg_num_nodes
+    
 def setup_logger(
     name,
     level=logging.DEBUG,
@@ -220,7 +228,7 @@ def test(model, dataset, device, task, mode, pmodel=None):
         labels = []
         preds = []
         for i, batch in enumerate(dataset.test_loader):
-            print("Test batch:", "@"*25, f"{i}/{len(dataset.test_loader)}", "@"*25, end='\r')
+            # print("Test batch:", "@"*25, f"{i}/{len(dataset.test_loader)}", "@"*25, end='\r')
             temp_labels = batch.y.to(device)
             if mode == "prompt":
                 pmodel.eval()
