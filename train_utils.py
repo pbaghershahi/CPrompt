@@ -21,7 +21,8 @@ def pretrain_model(
     eval_step = 1,
     save_model = True, 
     pretext_task = "classification",
-    model_dir = "./pretrained"
+    model_dir = "./pretrained",
+    empty_pretrained_dir = False
 ):
     task = "multi" if s_dataset.num_gclass > 2 else "binary"
     if model_name == "GCN":
@@ -65,9 +66,9 @@ def pretrain_model(
                 f"Main Loss: {test_loss:.4f} -- Main ACC: {test_acc:.3f} -- Main F1: {test_f1:.3f}" +
                 " " + "#"*10
             )
-    
-    if save_model:
+    if empty_pretrained_dir:
         empty_directory(model_dir)
+    if save_model:
         os.makedirs(model_dir, exist_ok=True)
         if isinstance(logger, logging.Logger):
             exec_name = logger.handlers[1].baseFilename.split("/")[-1].split(".log")[0]

@@ -924,20 +924,28 @@ def get_gda_dataset(
         train_per = 0.85,
         test_per = 0.15,
         batch_size = 32,
+        get_s_dataset = True,
+        get_t_dataset = True
         ):
-    s_path = ds_dir + s_ds_name
-    s_dataset = EgoNetworkDataset(s_path, shuffle = True)
-    s_dataset.init_loaders(
-        train_test_split = [train_per, test_per],
-        batch_size = batch_size
-    )
-    gc.collect()
-    t_path = ds_dir + t_ds_name
-    t_dataset = EgoNetworkDataset(t_path, shuffle = True)
-    t_dataset.init_loaders(
-        train_test_split = [train_per, test_per],
-        batch_size = batch_size
-    )
+    if get_s_dataset:
+        s_path = ds_dir + s_ds_name
+        s_dataset = EgoNetworkDataset(s_path, shuffle = True)
+        s_dataset.init_loaders(
+            train_test_split = [train_per, test_per],
+            batch_size = batch_size
+        )
+    else:
+        s_dataset = "s_dataset"
+    # gc.collect()
+    if get_t_dataset:
+        t_path = ds_dir + t_ds_name
+        t_dataset = EgoNetworkDataset(t_path, shuffle = True)
+        t_dataset.init_loaders(
+            train_test_split = [train_per, test_per],
+            batch_size = batch_size
+        )
+    else:
+        t_dataset = "t_dataset"
     return s_dataset, t_dataset
 
 

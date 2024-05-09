@@ -31,7 +31,7 @@ class PretrainedModel(nn.Module):
             graph_batch = graph_batch.to(device)
         if not decoder:
             scores = self.decoder(graph_batch)
-            return scores
+            return scores, "embeds"
         x = self.gnn_modul(graph_batch.x, graph_batch.edge_index)
         x = global_mean_pool(x, graph_batch.batch)
         scores = self.decoder(F.dropout(x, p=self.r_dropout, training=self.training))
