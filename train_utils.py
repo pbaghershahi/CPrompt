@@ -221,7 +221,7 @@ class PromptTrainer():
             loss.backward()
             optimizer.step()
             total_grad_norm = 0
-            if i % max(1, int((t_dataset.n_train//batch.y.size(0))*0.2)) == 0:
+            if i % max(1, int((t_dataset.n_train//batch.y.size(0))*0.5)) == 0:
                 logger.info(f"Train batch: {i}/{np.ceil(t_dataset.n_train//batch.y.size(0))}, Train Loss: {loss.data}")
 
 
@@ -278,7 +278,7 @@ def prompting(
             scheduler.step()
             optimizer.zero_grad()
             
-            if epoch % eval_step == 0:
+            if epoch % eval_step == 0 or epoch >= n_epochs - 6:
                 pmodel.eval()
                 main_model.eval()
                 test_loss, test_acc, test_f1 = test(main_model, t_dataset, device, task = task, mode = "prompt", pmodel = pmodel)
@@ -288,7 +288,7 @@ def prompting(
                     f"Main ACC: {test_acc:.3f} -- Main F1: {test_f1:.3f}" +
                     " " + "#"*10
                 )
-                if epoch >= 125:
+                if epoch >= n_epochs - 6:
                     test_average_acc.append(test_acc)
                     test_average_f1.append(test_f1)
                     

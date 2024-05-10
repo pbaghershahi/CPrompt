@@ -46,7 +46,7 @@ def setup_logger(
 
     return logger
 
-def fix_seed(seed_value, random_lib=False, numpy_lib=False, torch_lib=False):
+def fix_seed(seed_value, random_lib=True, numpy_lib=True, torch_lib=True):
     if random_lib:
         random.seed(seed_value)
     if numpy_lib:

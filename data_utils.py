@@ -716,6 +716,8 @@ class NodeToGraphDataset(GDataset):
         else:
             all_idxs = torch.arange(self.num_gsamples)
             if shuffle: 
+                seed = kwargs["seed"] if "seed" in kwargs else 2411
+                fix_seed(seed)
                 perm = torch.randperm(self.num_gsamples)
                 all_idxs = all_idxs[perm]
             if train_test_split[0] + train_test_split[1] != 1.0:
@@ -775,7 +777,7 @@ class SubsetRandomSampler(SubsetSampler):
 
 
 class InfluenceDataSet(Dataset):
-    def __init__(self, file_dir, shuffle):
+    def __init__(self, file_dir):
         adj_matrices = np.load(os.path.join(file_dir, "adjacency_matrix.npy")).astype(np.int8)
         # self-loop trick, the input adj_matrices should have no self-loop
         # identity = np.identity(adj_matrices.shape[1])
@@ -788,12 +790,12 @@ class InfluenceDataSet(Dataset):
         embedding = load_w2v_feature(os.path.join(file_dir, "deepwalk.emb_64"), vertices.max())
         vertex_features = np.load(os.path.join(file_dir, "vertex_feature.npy"))
         # vertex_features = preprocessing.scale(vertex_features)
-        if shuffle:
-            adj_matrices, influence_features, labels, vertices = sk_shuffl(
-                adj_matrices, influence_features,
-                labels, vertices,
-                random_state = 2728
-                )
+        # if shuffle:
+        #     adj_matrices, influence_features, labels, vertices = sk_shuffl(
+        #         adj_matrices, influence_features,
+        #         labels, vertices,
+        #         random_state = 2728
+        #         )
         self.vertices = torch.as_tensor(vertices, dtype=torch.int)
         self.adj_matrices = torch.as_tensor(adj_matrices, dtype=torch.int8)
         self.labels = torch.as_tensor(labels, dtype=torch.int64)
@@ -819,10 +821,9 @@ class InfluenceDataSet(Dataset):
 class EgoNetworkDataset(GDataset):
     def __init__(self,
                  ds_path,
-                 shuffle = False,
                  **kwargs) -> None:
         super(EgoNetworkDataset, self).__init__()
-        self._data = InfluenceDataSet(ds_path, shuffle)
+        self._data = InfluenceDataSet(ds_path)
         self.num_nsamples = self._data.vertex_features.size(0)
         self.num_nclass = self._data.labels.unique().size(0)
         self.num_gclass = self.num_nclass
@@ -864,12 +865,21 @@ class EgoNetworkDataset(GDataset):
             test_idxs: torch.Tensor = None,
             train_test_split=[0.85, 0.15],
             batch_size=32,
-            **kwargs) -> None:
+            shuffle = False, **kwargs) -> None:
         if (train_idxs is not None) and (valid_idxs is not None) and (test_idxs is not None):
             self.n_train = train_idxs.size(0)
             self.n_valid = valid_idxs.size(0)
             self.n_test = test_idxs.size(0)
+            self.train_idxs = train_idxs
+            self.valid_idxs = valid_idxs
+            self.test_idxs = test_idxs
         else:
+            all_idxs = torch.arange(self.num_gsamples)
+            if shuffle: 
+                seed = kwargs["seed"] if "seed" in kwargs else 2411
+                fix_seed(seed)
+                perm = torch.randperm(self.num_gsamples)
+                all_idxs = all_idxs[perm]
             if train_test_split[0] + train_test_split[1] != 1.0:
                 valid_per = 1 - (train_test_split[0] + train_test_split[1])
             else:
@@ -877,9 +887,9 @@ class EgoNetworkDataset(GDataset):
             self.n_train = int(self.num_gsamples * train_test_split[0])
             self.n_valid = int(self.num_gsamples * valid_per)
             self.n_test = self.num_gsamples - (self.n_train + self.n_valid)
-        self.train_idxs = torch.arange(self.n_train)
-        self.valid_idxs = torch.arange(self.n_train, self.n_train + self.n_valid)
-        self.test_idxs = torch.arange(self.n_train + self.n_valid, self.n_train + self.n_valid + self.n_test)
+            self.train_idxs = all_idxs[:self.n_train]
+            self.valid_idxs = all_idxs[self.n_train:self.n_train + self.n_valid]
+            self.test_idxs = all_idxs[self.n_train + self.n_valid:self.n_train + self.n_valid + self.n_test]
         self.normalize_feats(
             normalize_mode = "max",
             train_idxs = self.train_idxs,
@@ -925,24 +935,29 @@ def get_gda_dataset(
         test_per = 0.15,
         batch_size = 32,
         get_s_dataset = True,
-        get_t_dataset = True
+        get_t_dataset = True,
+        seed = 2411
         ):
     if get_s_dataset:
         s_path = ds_dir + s_ds_name
-        s_dataset = EgoNetworkDataset(s_path, shuffle = True)
+        s_dataset = EgoNetworkDataset(s_path)
         s_dataset.init_loaders(
             train_test_split = [train_per, test_per],
-            batch_size = batch_size
+            batch_size = batch_size,
+            shuffle = True,
+            seed = seed
         )
     else:
         s_dataset = "s_dataset"
     # gc.collect()
     if get_t_dataset:
         t_path = ds_dir + t_ds_name
-        t_dataset = EgoNetworkDataset(t_path, shuffle = True)
+        t_dataset = EgoNetworkDataset(t_path)
         t_dataset.init_loaders(
             train_test_split = [train_per, test_per],
-            batch_size = batch_size
+            batch_size = batch_size,
+            shuffle = True,
+            seed = seed
         )
     else:
         t_dataset = "t_dataset"
@@ -950,22 +965,23 @@ def get_gda_dataset(
 
 
 def get_node_dataset(
-        ds_name,
-        cov_scale = 2,
-        mean_shift = 0,
-        train_per = 0.85,
-        test_per = 0.15,
-        batch_size = 32,
-        n_hopes = 2,
-        norm_mode = "max",
-        node_attributes = True,
-        visualize = False):
+    ds_name,
+    cov_scale = 2,
+    mean_shift = 0,
+    train_per = 0.85,
+    test_per = 0.15,
+    batch_size = 32,
+    n_hopes = 2,
+    norm_mode = "max",
+    node_attributes = True,
+    seed = 2411
+):
 
     """ Currently supported datasets:
         - Cora_
     """
     dataset = Planetoid(
-        root = 'data/Cora',
+        root = f'data/{ds_name}',
         name = ds_name
         )
 
@@ -979,6 +995,7 @@ def get_node_dataset(
     n_val = valid_idxs.size(0)
     n_test = test_idxs.size(0)
     n_other = other_idxs.size(0)
+    fix_seed(seed)
     train_perm = torch.randperm(n_train)
     valid_perm = torch.randperm(n_val)
     test_perm = torch.randperm(n_test)
@@ -1032,11 +1049,7 @@ def get_node_dataset(
         normalize_mode = norm_mode,
         shuffle = False
         )
-
-    if visualize:
-        s_dataset.visualize("/content/CPrompt/tsne_source.png")
-        t_dataset.visualize("/content/CPrompt/tsne_destination.png")
-
+    
     return s_dataset, t_dataset
 
 
@@ -1108,7 +1121,9 @@ class FromPyGGraph(GDataset):
             self.test_idxs = test_idxs
         else:
             all_idxs = torch.arange(self.num_gsamples)
-            if shuffle: 
+            if shuffle:
+                seed = kwargs["seed"] if "seed" in kwargs else 2411
+                fix_seed(seed)
                 perm = torch.randperm(self.num_gsamples)
                 all_idxs = all_idxs[perm]
             if train_test_split[0] + train_test_split[1] != 1.0:
@@ -1168,6 +1183,7 @@ def get_pyggda_dataset(
         batch_size = 32,
         norm_mode = "max",
         node_attributes = True,
+        seed = 2411
         ):
 
     s_dataset = TUDataset(
@@ -1180,7 +1196,8 @@ def get_pyggda_dataset(
         train_test_split = [train_per, test_per],
         batch_size = batch_size,
         normalize_mode = norm_mode,
-        shuffle = True
+        shuffle = True,
+        seed = seed
         )
 
     t_dataset = TUDataset(
@@ -1193,7 +1210,8 @@ def get_pyggda_dataset(
         train_test_split = [train_per, test_per],
         batch_size = batch_size,
         normalize_mode = norm_mode,
-        shuffle = True
+        shuffle = True,
+        seed = seed
         )
     return s_dataset, t_dataset 
 
