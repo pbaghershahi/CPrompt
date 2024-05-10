@@ -225,14 +225,20 @@ def aug_graph(org_graph, aug_prob, aug_type="link", mode="drop"):
             x[perm] = .0
     return org_graph
 
-def test(model, dataset, device, task, mode, pmodel=None):
+def test(model, dataset, device, task, mode, pmodel = None, validation = True):
     with torch.no_grad():
         model.eval()
         f1 = BinaryF1Score() if task == "binary" else MulticlassF1Score(num_classes=dataset.num_gclass, average="micro")
         test_loss, correct = 0, 0
         labels = []
         preds = []
-        for i, batch in enumerate(dataset.test_loader):
+        if validation:
+            data_loader = dataset.valid_loader
+            n_samples = dataset.n_valid
+        else:
+            data_loader = dataset.test_loader
+            n_samples = dataset.n_test
+        for i, batch in enumerate(data_loader):
             # print("Test batch:", "@"*25, f"{i}/{len(dataset.test_loader)}", "@"*25, end='\r')
             temp_labels = batch.y.to(device)
             if mode == "prompt":
@@ -251,8 +257,8 @@ def test(model, dataset, device, task, mode, pmodel=None):
         # ipdb.set_trace()
         labels = torch.cat(labels)
         preds = torch.cat(preds)
-        test_loss /= dataset.n_test
-        test_acc = int((labels == preds).sum()) / dataset.n_test
+        test_loss /= n_samples
+        test_acc = int((labels == preds).sum()) / n_samples
         test_f1 = f1(preds.detach().cpu(), labels.detach().cpu())
     return test_loss, test_acc, test_f1
 

@@ -7,9 +7,8 @@ from torch.optim.lr_scheduler import StepLR
 import numpy as np
 from utils import *
 from data_utils import *
+from prompt_func import *
 from model import *
-from copy import deepcopy
-from scipy.spatial.distance import cdist
 
 def pretrain_model(
     s_dataset,
@@ -37,8 +36,8 @@ def pretrain_model(
     optimizer = Adam(model.parameters(), lr = optimizer_config["lr"])
     scheduler = StepLR(optimizer, step_size = optimizer_config["scheduler_step_size"], gamma = optimizer_config["scheduler_gamma"])
     
-    test_loss, test_acc, test_f1 = test(model, s_dataset, device, task = task, mode = "pretrain")
-    logger.info(f'GNN Before Pretraining -- Loss: {test_loss:.4f} -- ACC: {test_acc:.3f} -- F1-score: {test_f1:.3f}')
+    test_loss, test_acc, test_f1 = test(model, s_dataset, device, task = task, mode = "pretrain", validation = False)
+    logger.info(f'GNN Before Pretraining -- Test Loss: {test_loss:.4f} -- Test ACC: {test_acc:.3f} -- Test F1-score: {test_f1:.3f}')
 
     n_epochs = training_config["n_epochs"]
     for epoch in range(n_epochs):
@@ -59,13 +58,19 @@ def pretrain_model(
         optimizer.zero_grad()
 
         if epoch % eval_step == 0:
-            test_loss, test_acc, test_f1 = test(model, s_dataset, device, task = task, mode = "pretrain")
+            valid_loss, valid_acc, valid_f1 = test(model, s_dataset, device, task = task, mode = "pretrain", validation = True)
             logger.info(
-                "#"*10 + " " +
                 f"Epoch: {epoch}/{n_epochs} -- Train Loss: {loss:.4f} -- " +
-                f"Main Loss: {test_loss:.4f} -- Main ACC: {test_acc:.3f} -- Main F1: {test_f1:.3f}" +
-                " " + "#"*10
+                f"Validation Loss: {valid_loss:.4f} -- Validation ACC: {valid_acc:.3f} -- Validation F1: {valid_f1:.3f}"
             )
+
+    test_loss, test_acc, test_f1 = test(model, s_dataset, device, task = task, mode = "pretrain", validation = True)
+    logger.info(
+        "#"*10 + " " +
+        f"Final Results: -- Train Loss: {loss:.4f} -- " +
+        f"Test Loss: {test_loss:.4f} -- Test ACC: {test_acc:.3f} -- Test F1: {test_f1:.3f}" +
+        " " + "#"*10
+    )
     if empty_pretrained_dir:
         empty_directory(model_dir)
     if save_model:
@@ -85,145 +90,7 @@ def pretrain_model(
     else:
         model_path = "Won't be stored"
     return model, model_path
-
-
-class PromptTrainer():
-    def __init__(self, prompt_method, training_config, *args, **kwargs) -> None:
-        super(PromptTrainer, self).__init__()
-        self.training_config = training_config
-        if prompt_method == "all_in_one":
-            self.train_func = self.all_in_one
-            self.obj_fun = F.cross_entropy
-        elif prompt_method == "contrastive":
-            self.train_func = self.contrastive
-            self.obj_fun = ntxent_loss
-        elif prompt_method == "pseudo_labeling":
-            self.train_func = self.pseudo_labeling
-            self.obj_fun = F.cross_entropy
-
-    def contrastive(self, pretrained_model, prompt_model, batch, device):
-        labels = batch.y.to(device)
-        batch = batch.to_data_list()
-        # prompt_batch = [
-        #     aug_graph(Data(x=g.x, edge_index=g.edge_index, y=g.y), n_drops, aug_type = aug_type, mode = aug_mode).to(device)
-        #     for g in batch
-        # ]
-        pos_batch = [
-            Data(x = g.x, edge_index = g.edge_index, y = g.y).to(device)
-            for g in batch
-        ]
-        prompt_batch = [
-            aug_graph(
-                Data(x = g.x, edge_index = g.edge_index, y = g.y), 
-                aug_prob = self.training_config["p_raug"], 
-                aug_type = self.training_config["aug_type"], 
-                mode = self.training_config["pos_aug_mode"]
-            ).to(device)
-            for g in batch
-        ]
-        neg_batch = [
-            aug_graph(
-                Data(x = g.x, edge_index = g.edge_index, y = g.y), 
-                aug_prob = self.training_config["n_raug"], 
-                aug_type = self.training_config["aug_type"], 
-                mode = self.training_config["neg_aug_mode"]
-            ).to(device)
-            for g in batch
-        ]
-        prompt_batch = prompt_model(prompt_batch)
-        prompt_out, prompt_embed = pretrained_model(prompt_batch, decoder = True)
-        pos_out, pos_embed = pretrained_model(pos_batch, decoder = True)
-        neg_out, neg_embed = pretrained_model(neg_batch, decoder = True)
-        # loss = multiclass_triplet_loss(prompt_out, pos_out, neg_out, 1)
-        loss = self.obj_fun(prompt_out, pos_out, neg_out, weighting=None)
-        if self.training_config["add_link_loss"]:
-            adj_labels = get_adj_labels(batch).to(device)
-            loss += link_predict_loss(prompt_batch, adj_labels)
-        if self.training_config["r_reg"] > 0.0 and prompt_model.prompt_fn == "add_tokens":
-            loss += self.training_config["r_reg"] * prompt_model.token_embeds.pow(2).mean()
-        return loss
-
-    def pseudo_labeling(self, pretrained_model, prompt_model, batch, device):
-        labels = batch.y.to(device)
-        batch = batch.to_data_list()
-        pos_batch = [
-            Data(x = g.x, edge_index = g.edge_index, y = g.y).to(device)
-            for g in batch
-        ]
-        prompt_batch = [
-            aug_graph(
-                Data(x = g.x, edge_index = g.edge_index, y = g.y), 
-                aug_prob = self.training_config["p_raug"], 
-                aug_type = self.training_config["aug_type"], 
-                mode = self.training_config["pos_aug_mode"]
-            ).to(device)
-            for g in batch
-        ]
-        prompt_batch = prompt_model(prompt_batch)
-        prompt_out, prompt_embed = pretrained_model(
-            prompt_batch,
-            decoder = True,
-            device = device
-            )
-        pos_out, pos_embed = pretrained_model(
-            pos_batch,
-            decoder = True,
-            device = device
-            )
-        pos_probs = F.softmax(pos_out, dim=1)
-        pos_embed = (pos_embed.T / pos_embed.norm(p=2, dim=1)).T
-        ps_embds = pos_embed.detach().cpu().numpy()
-        ps_probs = pos_probs.detach().cpu().numpy()
-        initc = ps_probs.T @ ps_embds
-        initc = initc / (1e-8 + ps_probs.sum(axis=0)[:,None])
-        dd = cdist(ps_embds, initc, 'cosine')
-        pred_label = dd.argmin(axis=1)
-
-        for round in range(2):
-            # TODO: Can't we use the actual probabilities or soft labels rather than hard labels?
-            ps_probs = np.eye(ps_probs.shape[1])[pred_label, :]
-            initc = ps_probs.T @ ps_embds
-            initc = np.where(initc > 0, initc, 1e-8)
-            initc = initc / (1e-8 + ps_probs.sum(axis=0)[:,None])
-            dd = cdist(ps_embds, initc, 'cosine')
-            pred_label = dd.argmin(axis=1)
-        ps_probs = torch.as_tensor(np.eye(prompt_out.size(1))[pred_label, :], device = device)
-        # ps_probs = F.softmax(torch.as_tensor(1 - dd, device = device), dim=1)
-        loss = self.obj_fun(prompt_out, ps_probs)
-        # softmax_out = F.softmax(prompt_out, dim=1)
-        # loss += entropy_loss(softmax_out).mean()
-        # b_softmax = softmax_out.mean(dim=0)
-        # loss += torch.sum(b_softmax * torch.log(b_softmax + 1e-5))
-        if self.training_config["r_reg"] > 0.0 and prompt_model.prompt_fn == "add_tokens":
-            loss += self.training_config["r_reg"] * prompt_model.token_embeds.pow(2).mean()
-        return loss
-
-    def all_in_one(self, pretrained_model, prompt_model, batch, device):
-        labels = batch.y.to(device)
-        prompt_batch = prompt_model(batch, device)
-        prompt_out, _ = pretrained_model(
-            prompt_batch,
-            decoder = True,
-            )
-        loss = self.obj_fun(prompt_out, labels, reduction="mean")
-        if self.training_config["r_reg"] > 0.0 and not prompt_model.trans_x:
-            loss += self.training_config["r_reg"] * prompt_model.token_embeds.pow(2).mean()
-        return loss
-        
-    def train(self, t_dataset, pretrained_model, prompt_model, optimizer, device, logger) -> None:
-        for i, batch in enumerate(t_dataset.train_loader):
-            optimizer.zero_grad()
-            loss = self.train_func(pretrained_model, prompt_model, batch, device)
-            # ipdb.set_trace()
-            # for name, param in prompt_model.named_parameters():
-            #     if param.requires_grad:
-            #         print(name)
-            loss.backward()
-            optimizer.step()
-            total_grad_norm = 0
-            if i % max(1, int((t_dataset.n_train//batch.y.size(0))*0.5)) == 0:
-                logger.info(f"Train batch: {i}/{np.ceil(t_dataset.n_train//batch.y.size(0))}, Train Loss: {loss.data}")
-
+    
 
 def prompting(
     t_dataset,
@@ -239,9 +106,11 @@ def prompting(
     eval_step = 1
 ):
     task = "multi" if t_dataset.num_gclass > 2 else "binary"
-    overal_acc = []
-    overal_f1 = []
-    for _ in range(num_runs):
+    overal_test_acc = []
+    overal_valid_acc = []
+    overal_test_f1 = []
+    overal_valid_f1 = []
+    for k in range(num_runs):
     
         main_model = PretrainedModel(**pretrained_config)
         if prompt_method == "all_in_one":
@@ -263,13 +132,13 @@ def prompting(
         Trainer = PromptTrainer(prompt_method, training_config)
     
         if s_dataset is not None:
-            test_loss, test_acc, test_f1 = test(main_model, s_dataset, device, task = task, mode = "pretrain")
-            logger.info(f'Pretrained GNN on Source Dataset -- Loss: {test_loss:.4f} -- ACC: {test_acc:.3f} -- F1-score: {test_f1:.3f}')
-        test_loss, test_acc, test_f1 = test(main_model, t_dataset, device, task = task, mode = "pretrain")
-        logger.info(f'Pretrained GNN on Target Dataset Without Prompting -- Loss: {test_loss:.4f} -- ACC: {test_acc:.3f} -- F1-score: {test_f1:.3f}')
+            test_loss, test_acc, test_f1 = test(main_model, s_dataset, device, task = task, mode = "pretrain", validation = False)
+            logger.info(f'Pretrained GNN on Source Dataset -- Test Loss: {test_loss:.4f} -- Test ACC: {test_acc:.3f} -- Test F1-score: {test_f1:.3f}')
+        test_loss, test_acc, test_f1 = test(main_model, t_dataset, device, task = task, mode = "pretrain", validation = False)
+        logger.info(f'Pretrained GNN on Target Dataset Without Prompting -- Test Loss: {test_loss:.4f} -- Test ACC: {test_acc:.3f} -- Test F1-score: {test_f1:.3f}')
     
-        test_average_acc = []
-        test_average_f1 = []
+        valid_average_acc = []
+        valid_average_f1 = []
         n_epochs = training_config["n_epochs"]
         for epoch in range(n_epochs):
             pmodel.train()
@@ -281,23 +150,27 @@ def prompting(
             if epoch % eval_step == 0 or epoch >= n_epochs - 6:
                 pmodel.eval()
                 main_model.eval()
-                test_loss, test_acc, test_f1 = test(main_model, t_dataset, device, task = task, mode = "prompt", pmodel = pmodel)
-                logger.info(
-                    "#"*10 + " " +
-                    f"Epoch: {epoch}/{n_epochs} -- Main Loss: {test_loss:.4f} -- " +
-                    f"Main ACC: {test_acc:.3f} -- Main F1: {test_f1:.3f}" +
-                    " " + "#"*10
-                )
+                valid_loss, valid_acc, valid_f1 = test(main_model, t_dataset, device, task = task, mode = "prompt", pmodel = pmodel, validation = True)
+                logger.info(f"Epoch: {epoch}/{n_epochs} -- Validation Loss: {valid_loss:.4f} -- Validation ACC: {valid_acc:.3f} -- Validation F1: {valid_f1:.3f}")
                 if epoch >= n_epochs - 6:
-                    test_average_acc.append(test_acc)
-                    test_average_f1.append(test_f1)
-                    
-        test_average_acc = np.array(test_average_acc).mean()
-        test_average_f1 = np.array(test_average_f1).mean()
-        logger.info(f"Average -- ACC: {test_average_acc} -- F1-score: {test_average_f1}")
-        overal_acc.append(test_average_acc)
-        overal_f1.append(test_average_f1)
-    overal_acc = np.array(overal_acc).mean()
-    overal_f1 = np.array(overal_f1).mean()
-    logger.info(f"Average after {num_runs} runs -- ACC: {np.array(overal_acc).mean()} -- F1-score: {np.array(overal_f1).mean()}")
+                    valid_average_acc.append(valid_acc)
+                    valid_average_f1.append(valid_f1)
+        n_evali_valid = len(valid_average_f1)
+        valid_average_acc = np.array(valid_average_acc).mean()
+        valid_average_f1 = np.array(valid_average_f1).mean()
+        logger.info(f"Run {k}/{num_runs}: Average Over Last {n_evali_valid} epochs -- Valid ACC: {valid_average_acc} -- Valid F1-score: {valid_average_f1}")
+        overal_valid_acc.append(valid_average_acc)
+        overal_valid_f1.append(valid_average_f1)
+
+        test_loss, test_acc, test_f1 = test(main_model, t_dataset, device, task = task, mode = "prompt", pmodel = pmodel, validation = False)
+        logger.info(f"Test Results of Run {k}/{num_runs}: -- Test Loss: {test_loss:.4f} -- Test ACC: {test_acc:.3f} -- Test F1: {test_f1:.3f}")
+        overal_test_acc.append(test_acc)
+        overal_test_f1.append(test_f1)
+        
+    overal_valid_acc = np.array(overal_valid_acc).mean()
+    overal_valid_f1 = np.array(overal_valid_f1).mean()
+    overal_test_acc = np.array(overal_test_acc).mean()
+    overal_test_f1 = np.array(overal_test_f1).mean()
+    logger.info(f"Validation average after {num_runs} runs -- ACC: {np.array(overal_valid_acc).mean()} -- F1-score: {np.array(overal_valid_f1).mean()}")
+    logger.info(f"Test average after {num_runs} runs -- ACC: {np.array(overal_test_acc).mean()} -- F1-score: {np.array(overal_test_f1).mean()}")
     return pmodel

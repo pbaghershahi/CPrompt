@@ -5,106 +5,152 @@ from data_utils import *
 import argparse
 
 def main(args):
-    print("here")
     os.makedirs('./log', exist_ok=True)
     exec_name = datetime.today().strftime('%Y-%m-%d-%H-%M')
     log_file_path = "./log/"+exec_name+".log"
     logger = setup_logger(name=exec_name, level=logging.INFO, log_file=log_file_path)
 
-    s_dataset, t_dataset = get_node_dataset(
-        "Cora",
-        cov_scale = 0.1,
-        mean_shift = 0.,
-        train_per = 0.80,
-        test_per = 0.20,
-        batch_size = 32,
-        n_hopes = 2,
-        norm_mode = "max",
-        node_attributes = True,
-        visualize = False
-    )
-
+    logger.info(f"Dataset: {args.dataset}. Training, Test: {args.train_per}, {args.test_per} -- Batch size: {args.batch_size}")
+    if args.dataset == "cora":
+        s_dataset, t_dataset = get_node_dataset(
+            "Cora",
+            cov_scale = 0.2,
+            mean_shift = 0.,
+            train_per = args.train_per,
+            test_per = args.test_per,
+            batch_size = args.batch_size,
+            n_hopes = 2,
+            norm_mode = "max",
+            node_attributes = True,
+            seed = args.seed
+        )
+    elif args.dataset == "letters":
+        s_dataset, t_dataset = get_pyggda_dataset(
+            "Letter-low",
+            "Letter-high",
+            store_to_path = "./data/TUDataset",
+            train_per = args.train_per,
+            test_per = args.test_per,
+            batch_size = args.batch_size,
+            norm_mode = "max",
+            node_attributes = True,
+            seed = args.seed
+        )
+        task = "multi"
+    elif args.dataset == "ego_network":
+        s_dataset, t_dataset = get_gda_dataset(
+            ds_dir = "./data/ego_network/",
+            s_ds_name = "oag",
+            t_ds_name = "digg",
+            train_per = args.train_per,
+            test_per = args.test_per,
+            batch_size = args.batch_size,
+            get_s_dataset = True,
+            get_t_dataset = True,
+            seed = args.seed
+        )
+    
     model_name = "GCN"
     model_config = dict(
         d_feat = s_dataset.n_feats, 
-        d_hid = 64, 
+        d_hid = args.pretrain_h_dim, 
         d_class = s_dataset.num_gclass, 
         n_layers = 2, r_dropout = 0.2
     )
     optimizer_config = dict(
-        lr = 1e-2,
-        scheduler_step_size = 100,
-        scheduler_gamma = 0.5
+        lr = args.pretrain_lr,
+        scheduler_step_size = args.pretrain_step_size,
+        scheduler_gamma = args.pretrain_lr
     )
     training_config = dict(
-        n_epochs = 50
+        n_epochs = args.pretrain_n_epochs
     )
+    logger.info(f"Setting for pretraining: Model: {model_config} -- Optimizer: {optimizer_config} -- Training: {training_config}")
 
-    _, pretrained_path = pretrain_model(
+    if args.pretrain:
+        logger.info(f"Pretraining {model_name} on {args.dataset} started for {args.pretrain_n_epochs} epochs")
+        _, pretrained_path = pretrain_model(
         s_dataset,
+        # t_dataset,
         model_name, 
         model_config,
         optimizer_config,
         training_config,
         logger,
-        eval_step = 1,
-        save_model = True, 
+        eval_step = args.pretrain_eval_step,
+        save_model = args.save_pretrained, 
         pretext_task = "classification",
-        model_dir = "./pretrained"
-    )
-
+        model_dir = "./pretrained",
+        empty_pretrained_dir = args.empty_pretrained_dir
+        )
+        logger.info(f"Pretraining is finished! Saved to: {pretrained_path}")
+    else:
+        pretrained_path = args.pretrain_path
+        logger.info(f"Using previous pretrained model at {pretrained_path}")
+    
     pretrained_config = model_config
+    num_tokens = int(np.ceil(cal_avg_num_nodes(t_dataset)))
+    logger.info(f"The number of tokens added: {num_tokens}")
     optimizer_config = dict(
-        lr = 1e-3,
-        scheduler_step_size = 100,
-        scheduler_gamma = 1.0
+        lr = args.lr,
+        scheduler_step_size = args.step_size,
+        scheduler_gamma = args.gamma
     )
+    logger.info(f"Prompting method: {args.prompt_method} -- Setting: Prompting function: {args.prompt_fn}")
     if args.prompt_method == "all_in_one":
         prompt_config = dict(
             token_dim = t_dataset.n_feats,
-            token_num = 10, 
-            cross_prune = 0.1, 
-            inner_prune = 0.3, 
-            trans_x = False
+            token_num = num_tokens, 
+            cross_prune = args.cross_prune, 
+            inner_prune = args.inner_prune, 
+            trans_x = args.trans_x
         )
         training_config = dict(
-            n_epochs = 150
+            n_epochs = args.n_epochs,
+            r_reg = args.r_reg
         )
+        logger.info(f"Prompt tuning setting: Transform X: {args.trans_x} -- Regularization: {args.r_reg} -- Epochs: {args.n_epochs}")
     elif args.prompt_method == "contrastive":
         prompt_config = dict(
             emb_dim = t_dataset.n_feats,
-            h_dim = 64,
+            h_dim = args.h_dim,
             output_dim = t_dataset.n_feats,
-            prompt_fn = "add_tokens",
-            token_num = 10
+            prompt_fn = args.prompt_fn,
+            token_num = num_tokens
         )
         training_config = dict(
-            aug_type = "feature",
-            pos_aug_mode = "mask",
-            neg_aug_mode = "arbitrary",
-            p_raug = 0.15,
-            n_raug = 0.15,
-            add_link_loss = False,
-            n_epochs = 150,
+            aug_type = args.aug_type,
+            pos_aug_mode = args.pos_aug_mode,
+            neg_aug_mode = args.neg_aug_mode,
+            p_raug = args.p_raug,
+            n_raug = args.n_raug,
+            add_link_loss = args.add_link_loss,
+            n_epochs = args.n_epochs,
+            r_reg = args.r_reg
         )
+        logger.info(f"Prompt tuning setting: Augmentation type: {args.aug_type} -- Positive aug mode and rate: {args.pos_aug_mode}, {args.p_raug} -- Negative aug mode and rate: {args.neg_aug_mode}, {args.n_raug} -- Regularization: {args.r_reg} -- Epochs: {args.n_epochs}")
     elif args.prompt_method == "pseudo_labeling":
         prompt_config = dict(
             emb_dim = t_dataset.n_feats,
-            h_dim = 64,
+            h_dim = args.h_dim,
             output_dim = t_dataset.n_feats,
-            prompt_fn = "add_tokens",
-            token_num = 10
+            prompt_fn = args.prompt_fn,
+            token_num = num_tokens
         )
         training_config = dict(
-            aug_type = "feature",
-            pos_aug_mode = "mask",
-            p_raug = 0.15,
-            n_epochs = 150,
+            aug_type = args.aug_type,
+            pos_aug_mode = args.pos_aug_mode,
+            p_raug = args.p_raug,
+            n_epochs = args.n_epochs,
+            r_reg = args.r_reg
         )
+        logger.info(f"Prompt tuning setting: Augmentation type: {args.aug_type} -- Positive aug mode and rate: {args.pos_aug_mode}, {args.p_raug} -- Regularization: {args.r_reg} -- Epochs: {args.n_epochs}")
     else:
         raise Exception("The chosen method is not valid!")
-    
-    _ = prompting(
+
+    logger.info(f"Setting for prompt tuning: Prompt: {prompt_config} -- Pretrained Model: {pretrained_config} -- Optimizer: {optimizer_config} -- Training: {training_config}")
+    logger.info(f"Prompt tuning started: Num runs: {args.num_runs} -- Eval step: {args.eval_step}")
+    pmodel = prompting(
         t_dataset,
         args.prompt_method, 
         prompt_config,
@@ -114,20 +160,6 @@ def main(args):
         training_config,
         logger,
         s_dataset,
-        num_runs = 5,
-        eval_step = 1
+        num_runs = args.num_runs,
+        eval_step = args.eval_step
     )
-
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='SAttLE')
-    parser.add_argument("-m", "--prompt-method", type=str, required=True,
-                        help="all_in_one, contrastive, pseudo_labeling")
-    parser.add_argument("--gpu", type=int, default=-1,
-                        help="gpu")
-    parser.add_argument("--lr", type=float, default=1e-3,
-                        help="learning rate")
-    parser.add_argument("--lr-decay", type=float, default=1,
-                        help="learning rate decay rate")
-
-    args = parser.parse_args()
-    main(args)
