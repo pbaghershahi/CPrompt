@@ -6,7 +6,7 @@ import argparse
 
 def main(args):
     os.makedirs('./log', exist_ok=True)
-    exec_name = datetime.today().strftime('%Y-%m-%d-%H-%M')
+    exec_name = datetime.today().strftime('%Y-%m-%d-%H-%M-%S')
     log_file_path = "./log/"+exec_name+".log"
     logger = setup_logger(name=exec_name, level=logging.INFO, log_file=log_file_path)
 
