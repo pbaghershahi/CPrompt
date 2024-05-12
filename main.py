@@ -1,4 +1,3 @@
-
 from train_utils import *
 from utils import *
 from data_utils import *
@@ -9,11 +8,12 @@ def main(args):
     exec_name = datetime.today().strftime('%Y-%m-%d-%H-%M-%S')
     log_file_path = "./log/"+exec_name+".log"
     logger = setup_logger(name=exec_name, level=logging.INFO, log_file=log_file_path)
+    t_ds_name = args.t_dataset if args.t_dataset != args.s_dataset else args.s_dataset
+    logger.info(f"Source Dataset: {args.s_dataset}, Target Dataset: {t_ds_name}. Training, Test: {args.train_per}, {args.test_per} -- Batch size: {args.batch_size}")
 
-    logger.info(f"Dataset: {args.dataset}. Training, Test: {args.train_per}, {args.test_per} -- Batch size: {args.batch_size}")
-    if args.dataset == "cora":
+    if args.s_dataset in ["Cora", "CiteSeer", "PubMed"]:
         s_dataset, t_dataset = get_node_dataset(
-            "Cora",
+            args.s_dataset,
             cov_scale = 0.2,
             mean_shift = 0.,
             train_per = args.train_per,
@@ -24,10 +24,11 @@ def main(args):
             node_attributes = True,
             seed = args.seed
         )
-    elif args.dataset == "letters":
-        s_dataset, t_dataset = get_pyggda_dataset(
-            "Letter-low",
-            "Letter-high",
+    elif args.s_dataset in ["ENZYMES", "PROTEINS_full"]:
+        s_dataset, t_dataset = get_graph_dataset(
+            args.s_dataset,
+            cov_scale = 0.2,
+            mean_shift = 0.,
             store_to_path = "./data/TUDataset",
             train_per = args.train_per,
             test_per = args.test_per,
@@ -36,12 +37,23 @@ def main(args):
             node_attributes = True,
             seed = args.seed
         )
-        task = "multi"
-    elif args.dataset == "ego_network":
+    elif args.s_dataset in ["Letter-high", "Letter-low", "Letter-med"]:
+        s_dataset, t_dataset = get_pyggda_dataset(
+            args.s_dataset,
+            t_ds_name,
+            store_to_path = "./data/TUDataset",
+            train_per = args.train_per,
+            test_per = args.test_per,
+            batch_size = args.batch_size,
+            norm_mode = "max",
+            node_attributes = True,
+            seed = args.seed
+        )
+    elif args.s_dataset in ["digg", "oag", "twitter", "weibo"]:
         s_dataset, t_dataset = get_gda_dataset(
             ds_dir = "./data/ego_network/",
-            s_ds_name = "oag",
-            t_ds_name = "digg",
+            s_ds_name = args.s_dataset,
+            t_ds_name = t_ds_name,
             train_per = args.train_per,
             test_per = args.test_per,
             batch_size = args.batch_size,
@@ -68,7 +80,7 @@ def main(args):
     logger.info(f"Setting for pretraining: Model: {model_config} -- Optimizer: {optimizer_config} -- Training: {training_config}")
 
     if args.pretrain:
-        logger.info(f"Pretraining {model_name} on {args.dataset} started for {args.pretrain_n_epochs} epochs")
+        logger.info(f"Pretraining {model_name} on {args.s_dataset} started for {args.pretrain_n_epochs} epochs")
         _, pretrained_path = pretrain_model(
         s_dataset,
         # t_dataset,
@@ -96,7 +108,7 @@ def main(args):
         scheduler_step_size = args.step_size,
         scheduler_gamma = args.gamma
     )
-    logger.info(f"Prompting method: {args.prompt_method} -- Setting: Prompting function: {args.prompt_fn}")
+    logger.info(f"Prompting method: {args.prompt_method} -- Setting: Prompting function: {args.prompt_fn} -- Target Dataset: {t_ds_name}")
     if args.prompt_method == "all_in_one":
         prompt_config = dict(
             token_dim = t_dataset.n_feats,

@@ -64,7 +64,7 @@ def pretrain_model(
                 f"Validation Loss: {valid_loss:.4f} -- Validation ACC: {valid_acc:.3f} -- Validation F1: {valid_f1:.3f}"
             )
 
-    test_loss, test_acc, test_f1 = test(model, s_dataset, device, task = task, mode = "pretrain", validation = True)
+    test_loss, test_acc, test_f1 = test(model, s_dataset, device, task = task, mode = "pretrain", validation = False)
     logger.info(
         "#"*10 + " " +
         f"Final Results: -- Train Loss: {loss:.4f} -- " +
@@ -78,7 +78,7 @@ def pretrain_model(
         if isinstance(logger, logging.Logger):
             exec_name = logger.handlers[1].baseFilename.split("/")[-1].split(".log")[0]
         else:
-            exec_name = datetime.today().strftime('%Y-%m-%d-%H-%M')
+            exec_name = datetime.today().strftime('%Y-%m-%d-%H-%M-%S')
         model_path = os.path.join(model_dir, f"{model_name}_Pretrained_{exec_name}.pth")
         torch.save(
             {
