@@ -614,11 +614,15 @@ class NodeToGraphDataset(GDataset):
         self._data.x += torch.as_tensor(noise, dtype=torch.float, device=self._data.x.device)
 
     def normalize_feats_(self, normalize_mode, **kwargs):
-        self.train_ds._data.x = normalize_(self.train_ds._data.x, dim=0, mode=normalize_mode)
+        self.train_ds._data.x, train_normal_params = normalize_(self.train_ds._data.x, dim=0, mode=normalize_mode)
         if self.n_valid > 0:
-            self.valid_ds._data.x = normalize_(self.valid_ds._data.x, dim=0, mode=normalize_mode)
+            self.valid_ds._data.x = normalize_(
+                self.valid_ds._data.x, dim=0, 
+                mode=normalize_mode, normal_params = train_normal_params)
         if self.n_test > 0:
-            self.test_ds._data.x = normalize_(self.test_ds._data.x, dim=0, mode=normalize_mode)
+            self.test_ds._data.x = normalize_(
+                self.test_ds._data.x, dim=0, 
+                mode=normalize_mode, normal_params = train_normal_params)
 
     def init_loaders_(self, loader_collate, batch_size):
         self.train_loader = DataLoader(self.train_ds, batch_size=batch_size, shuffle=True, collate_fn=loader_collate)
@@ -737,26 +741,26 @@ class EgoNetworkDataset(GDataset):
         return self._data.influence_features.size(-1) + self._data.embedding.size(-1) + self._data.vertex_features.size(-1)
 
     def normalize_feats_(self, normalize_mode, **kwargs):
-        self._data.embedding[self.train_idxs, :] = normalize_(
+        self._data.embedding[self.train_idxs, :], train_normal_params_embed = normalize_(
             self._data.embedding[self.train_idxs, :],
             dim=0, mode=normalize_mode)
-        self._data.vertex_features[self.train_idxs, :] = normalize_(
+        self._data.vertex_features[self.train_idxs, :], train_normal_params_vfeat = normalize_(
             self._data.vertex_features[self.train_idxs, :],
             dim=0, mode=normalize_mode)
         if self.n_valid > 0:
-            self._data.embedding[self.valid_idxs, :] = normalize_(
+            self._data.embedding[self.valid_idxs, :], _ = normalize_(
                 self._data.embedding[self.valid_idxs, :],
-                dim=0, mode=normalize_mode)
-            self._data.vertex_features[self.valid_idxs, :] = normalize_(
+                dim=0, mode=normalize_mode, normal_params = train_normal_params_embed)
+            self._data.vertex_features[self.valid_idxs, :], _ = normalize_(
                 self._data.vertex_features[self.valid_idxs, :],
-                dim=0, mode=normalize_mode)
+                dim=0, mode=normalize_mode, normal_params = train_normal_params_vfeat)
         if self.n_test > 0:
-            self._data.embedding[self.test_idxs, :] = normalize_(
+            self._data.embedding[self.test_idxs, :], _ = normalize_(
                 self._data.embedding[self.test_idxs, :],
-                dim=0, mode=normalize_mode)
-            self._data.vertex_features[self.test_idxs, :] = normalize_(
+                dim=0, mode=normalize_mode, normal_params = train_normal_params_embed)
+            self._data.vertex_features[self.test_idxs, :], _ = normalize_(
                 self._data.vertex_features[self.test_idxs, :],
-                dim=0, mode=normalize_mode)
+                dim=0, mode=normalize_mode, normal_params = train_normal_params_vfeat)
 
     def init_loaders_(self, loader_collate, batch_size):
         self.train_loader = DataLoader(
@@ -864,11 +868,11 @@ class FromPyGGraph(GDataset):
         return all_graphs
 
     def normalize_feats_(self, normalize_mode, **kwargs):
-        self.train_ds._data.x = normalize_(self.train_ds._data.x, dim=0, mode=normalize_mode)
+        self.train_ds._data.x, train_normal_params = normalize_(self.train_ds._data.x, dim=0, mode=normalize_mode)
         if self.n_valid > 0:
-            self.valid_ds._data.x = normalize_(self.valid_ds._data.x, dim=0, mode=normalize_mode)
+            self.valid_ds._data.x, _ = normalize_(self.valid_ds._data.x, dim=0, mode=normalize_mode, normal_params = train_normal_params)
         if self.n_test > 0:
-            self.test_ds._data.x = normalize_(self.test_ds._data.x, dim=0, mode=normalize_mode)
+            self.test_ds._data.x, _ = normalize_(self.test_ds._data.x, dim=0, mode=normalize_mode, normal_params = train_normal_params)
         
     def init_loaders_(self, loader_collate, batch_size):
         self.train_loader = DataLoader(self.train_ds, batch_size=batch_size, shuffle=True, collate_fn=loader_collate)

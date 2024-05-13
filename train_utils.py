@@ -49,11 +49,12 @@ def pretrain_model(
                 decoder = True,
                 device = device
             )
+            # ipdb.set_trace()
             loss = obj_fun(scores, batch.y.to(device))
             loss.backward()
             optimizer.step()
-            if i % max(1, int((s_dataset.n_train//scores.size(0))*0.2)) == 0:
-                logger.info(f"Train batch: {i}/{np.ceil(s_dataset.n_train//scores.size(0))} -- Train Loss: {loss.item()}")
+            # if i % max(1, int((s_dataset.n_train//scores.size(0))*0.5)) == 0:
+            #     logger.info(f"Train batch: {i}/{np.ceil(s_dataset.n_train//scores.size(0))} -- Train Loss: {loss.item()}")
         scheduler.step()
         optimizer.zero_grad()
 

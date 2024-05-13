@@ -14,8 +14,8 @@ def main(args):
     if args.s_dataset in ["Cora", "CiteSeer", "PubMed"]:
         s_dataset, t_dataset = get_node_dataset(
             args.s_dataset,
-            cov_scale = 0.2,
-            mean_shift = 0.,
+            cov_scale = args.noise_cov_scale,
+            mean_shift = args.noise_mean_shift,
             train_per = args.train_per,
             test_per = args.test_per,
             batch_size = args.batch_size,
@@ -27,8 +27,8 @@ def main(args):
     elif args.s_dataset in ["ENZYMES", "PROTEINS_full"]:
         s_dataset, t_dataset = get_graph_dataset(
             args.s_dataset,
-            cov_scale = 0.2,
-            mean_shift = 0.,
+            cov_scale = args.noise_cov_scale,
+            mean_shift = args.noise_mean_shift,
             store_to_path = "./data/TUDataset",
             train_per = args.train_per,
             test_per = args.test_per,
@@ -61,12 +61,12 @@ def main(args):
             get_t_dataset = True,
             seed = args.seed
         )
-    
+
     model_name = "GCN"
     model_config = dict(
-        d_feat = s_dataset.n_feats, 
-        d_hid = args.pretrain_h_dim, 
-        d_class = s_dataset.num_gclass, 
+        d_feat = s_dataset.n_feats,
+        d_hid = args.pretrain_h_dim,
+        d_class = s_dataset.num_gclass,
         n_layers = 2, r_dropout = 0.2
     )
     optimizer_config = dict(
@@ -84,13 +84,13 @@ def main(args):
         _, pretrained_path = pretrain_model(
         s_dataset,
         # t_dataset,
-        model_name, 
+        model_name,
         model_config,
         optimizer_config,
         training_config,
         logger,
         eval_step = args.pretrain_eval_step,
-        save_model = args.save_pretrained, 
+        save_model = args.save_pretrained,
         pretext_task = "classification",
         model_dir = "./pretrained",
         empty_pretrained_dir = args.empty_pretrained_dir
@@ -99,7 +99,7 @@ def main(args):
     else:
         pretrained_path = args.pretrain_path
         logger.info(f"Using previous pretrained model at {pretrained_path}")
-    
+
     pretrained_config = model_config
     num_tokens = int(np.ceil(cal_avg_num_nodes(t_dataset)))
     logger.info(f"The number of tokens added: {num_tokens}")
@@ -112,9 +112,9 @@ def main(args):
     if args.prompt_method == "all_in_one":
         prompt_config = dict(
             token_dim = t_dataset.n_feats,
-            token_num = num_tokens, 
-            cross_prune = args.cross_prune, 
-            inner_prune = args.inner_prune, 
+            token_num = num_tokens,
+            cross_prune = args.cross_prune,
+            inner_prune = args.inner_prune,
             trans_x = args.trans_x
         )
         training_config = dict(
@@ -164,7 +164,7 @@ def main(args):
     logger.info(f"Prompt tuning started: Num runs: {args.num_runs} -- Eval step: {args.eval_step}")
     pmodel = prompting(
         t_dataset,
-        args.prompt_method, 
+        args.prompt_method,
         prompt_config,
         pretrained_config,
         optimizer_config,

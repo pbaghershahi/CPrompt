@@ -274,17 +274,25 @@ def get_subgraph(graph, node_indices):
     sub_g = Data(x=sub_x, edge_index=sub_edges, y=sub_y)
     return sub_g
 
-def normalize_(input_tensor, dim=0, mode="max"):
-    if mode == "max":
-        max_value = input_tensor.max(dim=0).values
-        max_value[max_value==0] = 1.
-        input_tensor.div_(max_value)
+def normalize_(input_tensor, dim=0, mode="max", normal_params=None):
+    if normal_params is not None:
+        if mode == "max":
+            input_tensor.div_(normal_params)
+        else:
+            input_tensor.sub_(normal_params[0]).div_(normal_params[1])
     else:
-        mean = input_tensor.mean(dim=dim)
-        std = input_tensor.std(dim=dim)
-        std = torch.max(std, torch.ones_like(std)*1e-12)
-        input_tensor.sub_(mean).div_(std)
-    return input_tensor
+        if mode == "max":
+            max_value = input_tensor.max(dim=0).values
+            max_value[max_value==0] = 1.
+            input_tensor.div_(max_value)
+            normal_params = max_value
+        else:
+            mean = input_tensor.mean(dim=dim)
+            std = input_tensor.std(dim=dim)
+            std = torch.max(std, torch.ones_like(std)*1e-12)
+            input_tensor.sub_(mean).div_(std)
+            normal_params = (mean, std)
+    return input_tensor, normal_params
 
 def add_multivariate_noise(input_feats, mean, cov_matrix, inplace=True):
     n_samples, n_feats = input_feats.numpy().shape
