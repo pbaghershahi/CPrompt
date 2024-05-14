@@ -37,7 +37,7 @@ def pretrain_model(
     scheduler = StepLR(optimizer, step_size = optimizer_config["scheduler_step_size"], gamma = optimizer_config["scheduler_gamma"])
     
     test_loss, test_acc, test_f1 = test(model, s_dataset, device, task = task, mode = "pretrain", validation = False)
-    logger.info(f'GNN Before Pretraining -- Test Loss: {test_loss:.4f} -- Test ACC: {test_acc:.3f} -- Test F1-score: {test_f1:.3f}')
+    logger.info(f'GNN Before Pretraining -- Test Loss: {test_loss:.3f} -- Test ACC: {test_acc:.3f} -- Test F1-score: {test_f1:.3f}')
 
     n_epochs = training_config["n_epochs"]
     for epoch in range(n_epochs):
@@ -61,15 +61,15 @@ def pretrain_model(
         if epoch % eval_step == 0:
             valid_loss, valid_acc, valid_f1 = test(model, s_dataset, device, task = task, mode = "pretrain", validation = True)
             logger.info(
-                f"Epoch: {epoch}/{n_epochs} -- Train Loss: {loss:.4f} -- " +
-                f"Validation Loss: {valid_loss:.4f} -- Validation ACC: {valid_acc:.3f} -- Validation F1: {valid_f1:.3f}"
+                f"Epoch: {epoch}/{n_epochs} -- Train Loss: {loss:.3f} -- " +
+                f"Validation Loss: {valid_loss:.3f} -- Validation ACC: {valid_acc:.3f} -- Validation F1: {valid_f1:.3f}"
             )
 
     test_loss, test_acc, test_f1 = test(model, s_dataset, device, task = task, mode = "pretrain", validation = False)
     logger.info(
         "#"*10 + " " +
-        f"Final Results: -- Train Loss: {loss:.4f} -- " +
-        f"Test Loss: {test_loss:.4f} -- Test ACC: {test_acc:.3f} -- Test F1: {test_f1:.3f}" +
+        f"Final Results: -- Train Loss: {loss:.3f} -- " +
+        f"Test Loss: {test_loss:.3f} -- Test ACC: {test_acc:.3f} -- Test F1: {test_f1:.3f}" +
         " " + "#"*10
     )
     if empty_pretrained_dir:
@@ -134,9 +134,9 @@ def prompting(
     
         if s_dataset is not None:
             test_loss, test_acc, test_f1 = test(main_model, s_dataset, device, task = task, mode = "pretrain", validation = False)
-            logger.info(f'Pretrained GNN on Source Dataset -- Test Loss: {test_loss:.4f} -- Test ACC: {test_acc:.3f} -- Test F1-score: {test_f1:.3f}')
+            logger.info(f'Pretrained GNN on Source Dataset -- Test Loss: {test_loss:.3f} -- Test ACC: {test_acc:.3f} -- Test F1-score: {test_f1:.3f}')
         test_loss, test_acc, test_f1 = test(main_model, t_dataset, device, task = task, mode = "pretrain", validation = False)
-        logger.info(f'Pretrained GNN on Target Dataset Without Prompting -- Test Loss: {test_loss:.4f} -- Test ACC: {test_acc:.3f} -- Test F1-score: {test_f1:.3f}')
+        logger.info(f'Pretrained GNN on Target Dataset Without Prompting -- Test Loss: {test_loss:.3f} -- Test ACC: {test_acc:.3f} -- Test F1-score: {test_f1:.3f}')
     
         valid_average_acc = []
         valid_average_f1 = []
@@ -144,7 +144,7 @@ def prompting(
         for epoch in range(n_epochs):
             pmodel.train()
             main_model.eval()
-            Trainer.train(t_dataset, main_model, pmodel, optimizer, device, logger)
+            loss = Trainer.train(t_dataset, main_model, pmodel, optimizer, device, logger)
             scheduler.step()
             optimizer.zero_grad()
             
@@ -152,7 +152,7 @@ def prompting(
                 pmodel.eval()
                 main_model.eval()
                 valid_loss, valid_acc, valid_f1 = test(main_model, t_dataset, device, task = task, mode = "prompt", pmodel = pmodel, validation = True)
-                logger.info(f"Epoch: {epoch}/{n_epochs} -- Validation Loss: {valid_loss:.4f} -- Validation ACC: {valid_acc:.3f} -- Validation F1: {valid_f1:.3f}")
+                logger.info(f"Epoch: {epoch}/{n_epochs} -- Train Loss: {loss:.3f} -- Validation Loss: {valid_loss:.3f} -- Validation ACC: {valid_acc:.3f} -- Validation F1: {valid_f1:.3f}")
                 if epoch >= n_epochs - 6:
                     valid_average_acc.append(valid_acc)
                     valid_average_f1.append(valid_f1)
@@ -164,7 +164,7 @@ def prompting(
         overal_valid_f1.append(valid_average_f1)
 
         test_loss, test_acc, test_f1 = test(main_model, t_dataset, device, task = task, mode = "prompt", pmodel = pmodel, validation = False)
-        logger.info(f"Test Results of Run {k}/{num_runs}: -- Test Loss: {test_loss:.4f} -- Test ACC: {test_acc:.3f} -- Test F1: {test_f1:.3f}")
+        logger.info(f"Test Results of Run {k}/{num_runs}: -- Test Loss: {test_loss:.3f} -- Test ACC: {test_acc:.3f} -- Test F1: {test_f1:.3f}")
         overal_test_acc.append(test_acc)
         overal_test_f1.append(test_f1)
         
@@ -172,6 +172,6 @@ def prompting(
     overal_valid_f1 = np.array(overal_valid_f1).mean()
     overal_test_acc = np.array(overal_test_acc).mean()
     overal_test_f1 = np.array(overal_test_f1).mean()
-    logger.info(f"Validation average after {num_runs} runs -- ACC: {np.array(overal_valid_acc).mean()} -- F1-score: {np.array(overal_valid_f1).mean()}")
-    logger.info(f"Test average after {num_runs} runs -- ACC: {np.array(overal_test_acc).mean()} -- F1-score: {np.array(overal_test_f1).mean()}")
+    logger.info(f"Validation average after {num_runs} runs -- ACC: {np.array(overal_valid_acc).mean():.3f} -- F1-score: {np.array(overal_valid_f1).mean():.3f}")
+    logger.info(f"Test average after {num_runs} runs -- ACC: {np.array(overal_test_acc).mean():.3f} -- F1-score: {np.array(overal_test_f1).mean():.3f}")
     return pmodel

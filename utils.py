@@ -14,7 +14,7 @@ def cal_avg_num_nodes(dataset):
     total_num_nodes = 0
     for batch in dataset.train_loader:
         total_num_nodes += batch.x.size(0)
-    avg_num_nodes = total_num_nodes / dataset.num_gsamples
+    avg_num_nodes = total_num_nodes / dataset.n_train
     return avg_num_nodes
     
 def setup_logger(
@@ -228,7 +228,7 @@ def aug_graph(org_graph, aug_prob, aug_type="link", mode="drop"):
 def test(model, dataset, device, task, mode, pmodel = None, validation = True):
     with torch.no_grad():
         model.eval()
-        f1 = BinaryF1Score() if task == "binary" else MulticlassF1Score(num_classes=dataset.num_gclass, average="micro")
+        f1 = BinaryF1Score() if task == "binary" else MulticlassF1Score(num_classes=dataset.num_gclass, average="macro")
         test_loss, correct = 0, 0
         labels = []
         preds = []

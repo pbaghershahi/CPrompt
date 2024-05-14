@@ -30,7 +30,7 @@ def graph_collate(batch):
     return g_batch
 
 
-def add_multivariate_noise(dataset: PyG_Dataset, mean_shift, cov_scale, inplace=True) -> None:
+def add_multivariate_noise(dataset, mean_shift, cov_scale, inplace=True) -> None:
     n_samples, n_feats = dataset.x.size()
     mean = np.ones(n_feats) * mean_shift
     cov_matrix = np.eye(n_feats) * cov_scale
@@ -608,26 +608,21 @@ class NodeToGraphDataset(GDataset):
     def x(self,):
         return self._data.x
 
-    def add_multivariate_noise(self, mean, cov_matrix, inplace=True) -> None:
-        n_samples, n_feats = self.x.shape
-        noise = np.random.multivariate_normal(mean, cov_matrix, n_samples)
-        self._data.x += torch.as_tensor(noise, dtype=torch.float, device=self._data.x.device)
-
     def normalize_feats_(self, normalize_mode, **kwargs):
         self.train_ds._data.x, train_normal_params = normalize_(self.train_ds._data.x, dim=0, mode=normalize_mode)
         if self.n_valid > 0:
-            self.valid_ds._data.x = normalize_(
+            self.valid_ds._data.x, _ = normalize_(
                 self.valid_ds._data.x, dim=0, 
                 mode=normalize_mode, normal_params = train_normal_params)
         if self.n_test > 0:
-            self.test_ds._data.x = normalize_(
+            self.test_ds._data.x, _ = normalize_(
                 self.test_ds._data.x, dim=0, 
                 mode=normalize_mode, normal_params = train_normal_params)
 
     def init_loaders_(self, loader_collate, batch_size):
-        self.train_loader = DataLoader(self.train_ds, batch_size=batch_size, shuffle=True, collate_fn=loader_collate)
-        self.valid_loader = DataLoader(self.valid_ds, batch_size=batch_size, shuffle=False, collate_fn=loader_collate)
-        self.test_loader = DataLoader(self.test_ds, batch_size=batch_size, shuffle=False, collate_fn=loader_collate)
+        self.train_loader = DataLoader(self.train_ds, batch_size=batch_size, shuffle=True, collate_fn=loader_collate, num_workers=1)
+        self.valid_loader = DataLoader(self.valid_ds, batch_size=batch_size, shuffle=False, collate_fn=loader_collate, num_workers=1)
+        self.test_loader = DataLoader(self.test_ds, batch_size=batch_size, shuffle=False, collate_fn=loader_collate, num_workers=1)
 
     def initialize(
             self,
@@ -764,23 +759,26 @@ class EgoNetworkDataset(GDataset):
 
     def init_loaders_(self, loader_collate, batch_size):
         self.train_loader = DataLoader(
-                self._data,
-                batch_size = batch_size,
-                sampler = SubsetRandomSampler(self.train_idxs),
-                collate_fn = loader_collate
-            )
+            self._data,
+            batch_size = batch_size,
+            sampler = SubsetRandomSampler(self.train_idxs),
+            collate_fn = loader_collate,
+            num_workers=1
+        )
         self.valid_loader = DataLoader(
-                self._data,
-                batch_size = batch_size,
-                sampler = SubsetSampler(self.valid_idxs),
-                collate_fn = loader_collate
-            )
+            self._data,
+            batch_size = batch_size,
+            sampler = SubsetSampler(self.valid_idxs),
+            collate_fn = loader_collate,
+            num_workers=1
+        )
         self.test_loader = DataLoader(
-                self._data,
-                batch_size = batch_size,
-                sampler = SubsetSampler(self.test_idxs),
-                collate_fn = loader_collate
-            )   
+            self._data,
+            batch_size = batch_size,
+            sampler = SubsetSampler(self.test_idxs),
+            collate_fn = loader_collate,
+            num_workers=1
+        )   
 
     def initialize(
             self,
@@ -800,43 +798,6 @@ class EgoNetworkDataset(GDataset):
         if normalize_mode is not None:
             self.normalize_feats_(normalize_mode)
         self.init_loaders_(loader_collate, batch_size)
-
-
-def get_gda_dataset(
-        ds_dir,
-        s_ds_name,
-        t_ds_name,
-        train_per = 0.85,
-        test_per = 0.15,
-        batch_size = 32,
-        get_s_dataset = True,
-        get_t_dataset = True,
-        seed = 2411
-        ):
-    if get_s_dataset:
-        s_path = ds_dir + s_ds_name
-        s_dataset = EgoNetworkDataset(s_path)
-        s_dataset.initialize(
-            train_test_split = [train_per, test_per],
-            batch_size = batch_size,
-            shuffle = True,
-            seed = seed
-        )
-    else:
-        s_dataset = "s_dataset"
-    # gc.collect()
-    if get_t_dataset:
-        t_path = ds_dir + t_ds_name
-        t_dataset = EgoNetworkDataset(t_path)
-        t_dataset.initialize(
-            train_test_split = [train_per, test_per],
-            batch_size = batch_size,
-            shuffle = True,
-            seed = seed
-        )
-    else:
-        t_dataset = "t_dataset"
-    return s_dataset, t_dataset
 
 
 class FromPyGGraph(GDataset):
@@ -875,9 +836,9 @@ class FromPyGGraph(GDataset):
             self.test_ds._data.x, _ = normalize_(self.test_ds._data.x, dim=0, mode=normalize_mode, normal_params = train_normal_params)
         
     def init_loaders_(self, loader_collate, batch_size):
-        self.train_loader = DataLoader(self.train_ds, batch_size=batch_size, shuffle=True, collate_fn=loader_collate)
-        self.valid_loader = DataLoader(self.valid_ds, batch_size=batch_size, shuffle=False, collate_fn=loader_collate)
-        self.test_loader = DataLoader(self.test_ds, batch_size=batch_size, shuffle=False, collate_fn=loader_collate)
+        self.train_loader = DataLoader(self.train_ds, batch_size=batch_size, shuffle=True, collate_fn=loader_collate, num_workers=1)
+        self.valid_loader = DataLoader(self.valid_ds, batch_size=batch_size, shuffle=False, collate_fn=loader_collate, num_workers=1)
+        self.test_loader = DataLoader(self.test_ds, batch_size=batch_size, shuffle=False, collate_fn=loader_collate, num_workers=1)
         
     def initialize(
             self,
@@ -1056,13 +1017,11 @@ def get_node_dataset(
         normalize_mode = norm_mode,
         shuffle = False
         )
+    t_data = add_multivariate_noise(t_data, mean_shift, cov_scale)
     t_dataset = NodeToGraphDataset(
         t_data,
         n_hopes = n_hopes
         )
-    mean = np.ones(t_dataset.n_feats) * mean_shift
-    cov_matrix = np.eye(t_dataset.n_feats) * cov_scale
-    t_dataset.add_multivariate_noise(mean, cov_matrix)
     t_n_train = train_perm[n_train//2:].size(0)
     t_n_valid = valid_perm[n_val//2:].size(0)
     t_n_test = test_perm[n_test//2:].size(0)
@@ -1127,4 +1086,41 @@ def get_graph_dataset(
         shuffle = True,
         seed = seed
     )
+    return s_dataset, t_dataset
+
+
+def get_gda_dataset(
+        ds_dir,
+        s_ds_name,
+        t_ds_name,
+        train_per = 0.85,
+        test_per = 0.15,
+        batch_size = 32,
+        get_s_dataset = True,
+        get_t_dataset = True,
+        seed = 2411
+        ):
+    if get_s_dataset:
+        s_path = ds_dir + s_ds_name
+        s_dataset = EgoNetworkDataset(s_path)
+        s_dataset.initialize(
+            train_test_split = [train_per, test_per],
+            batch_size = batch_size,
+            shuffle = True,
+            seed = seed
+        )
+    else:
+        s_dataset = "s_dataset"
+    # gc.collect()
+    if get_t_dataset:
+        t_path = ds_dir + t_ds_name
+        t_dataset = EgoNetworkDataset(t_path)
+        t_dataset.initialize(
+            train_test_split = [train_per, test_per],
+            batch_size = batch_size,
+            shuffle = True,
+            seed = seed
+        )
+    else:
+        t_dataset = "t_dataset"
     return s_dataset, t_dataset

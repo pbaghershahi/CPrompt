@@ -1,16 +1,28 @@
 from train_utils import *
 from utils import *
 from data_utils import *
+import yaml
 import argparse
 
 def main(args):
     os.makedirs('./log', exist_ok=True)
+    os.makedirs('./config', exist_ok=True)
     exec_name = datetime.today().strftime('%Y-%m-%d-%H-%M-%S')
     log_file_path = "./log/"+exec_name+".log"
     logger = setup_logger(name=exec_name, level=logging.INFO, log_file=log_file_path)
     t_ds_name = args.t_dataset if args.t_dataset != args.s_dataset else args.s_dataset
     logger.info(f"Source Dataset: {args.s_dataset}, Target Dataset: {t_ds_name}. Training, Test: {args.train_per}, {args.test_per} -- Batch size: {args.batch_size}")
-
+    if args.config_from_file == "":
+        if args.config_to_file != "":
+            with open(args.config_to_file, 'w') as outfile:
+                yaml.dump(vars(args), outfile, default_flow_style=False)
+            logger.info(f"Config saved to file: {args.config_to_file}")
+    else:
+        logger.info(f"Reading config from: {args.config_from_file}")
+        with open(args.config_from_file, 'r') as infile:
+            args = yaml.safe_load(infile)
+            args = argparse.Namespace(**args)
+            
     if args.s_dataset in ["Cora", "CiteSeer", "PubMed"]:
         s_dataset, t_dataset = get_node_dataset(
             args.s_dataset,

@@ -133,13 +133,9 @@ class PromptTrainer():
         for i, batch in enumerate(t_dataset.train_loader):
             optimizer.zero_grad()
             loss = self.train_func(pretrained_model, prompt_model, batch, device)
-            # ipdb.set_trace()
-            # for name, param in prompt_model.named_parameters():
-            #     if param.requires_grad:
-            #         print(name)
             loss.backward()
             optimizer.step()
             total_grad_norm = 0
             # if i % max(1, int((t_dataset.n_train//batch.y.size(0))*0.5)) == 0:
             #     logger.info(f"Train batch: {i}/{np.ceil(t_dataset.n_train//batch.y.size(0))}, Train Loss: {loss.data}")
-
+        return loss
