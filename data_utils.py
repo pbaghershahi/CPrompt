@@ -12,7 +12,6 @@ from torch.utils.data import Dataset, DataLoader, Sampler
 from sklearn.datasets import make_spd_matrix
 from sklearn.mixture import GaussianMixture
 from collections import OrderedDict
-from typing import List
 from copy import deepcopy
 from sklearn.utils import shuffle as sk_shuffl
 import ipdb
@@ -20,7 +19,7 @@ import gc
 
 
 def graph_collate(batch):
-    if not isinstance(batch, List):
+    if not isinstance(batch, list):
         g_list = []
         for g in batch:
             g_list.extend(g)
@@ -126,7 +125,8 @@ class NodeClassification(Dataset):
             edges = self.all_edges[idx]
             all_graphs.append(Data(x=x, edge_index=edges, y=y))
         return all_graphs, self._data.y[self.r_nodes[indices]]
-    
+
+
 class RandomNodeDatset(object):
     def __init__(
             self,
@@ -147,6 +147,7 @@ class RandomNodeDatset(object):
     def gen_dists(self, num_nclass, n_feats, cov_scale):
         means = np.random.uniform(-1, 1, size=(num_nclass, n_feats))
         covariances = [make_spd_matrix(n_feats)*cov_scale for _ in range(num_nclass)]
+        # TODO: We can change the probability of each gussian kernel. Currently we set weights to uniform.
         weights = np.ones(num_nclass) / num_nclass
         self.gmm = GaussianMixture(n_components=num_nclass)
         self.gmm.weights_ = weights
@@ -192,32 +193,6 @@ class RandomNodeDatset(object):
         noise = np.random.multivariate_normal(mean, cov_matrix, n_samples)
         self.x += noise
 
-    def gen_edges(self, p_intra_edge, p_inter_edge) -> None:
-        self.edges = []
-        for c in np.unique(self.y):
-            # Making intra-class edges
-            intra_idx = np.nonzero(self.y==c)[0]
-            num_intra_edges = intra_idx.shape[0]*p_intra_edge
-            intra_s = np.random.choice(intra_idx, num_intra_edges, replace=True)
-            intra_t = np.random.choice(intra_idx, num_intra_edges, replace=True)
-            not_loops_mask = (intra_s != intra_t)
-            intra_s = intra_s[not_loops_mask]
-            intra_t = intra_t[not_loops_mask]
-            intra_edges = np.stack((intra_s, intra_t))
-            # Making inter-class edges
-            inter_idx = np.nonzero(self.y!=c)[0]
-            num_inter_edges = int(intra_idx.shape[0]*p_inter_edge)
-            inter_s = np.random.choice(intra_idx, num_inter_edges, replace=True)
-            inter_t = np.random.choice(inter_idx, num_inter_edges, replace=True)
-            inter_edges = np.stack((inter_s, inter_t))
-            # Class edges
-            c_edges = np.concatenate((intra_edges, inter_edges), axis=1)
-            c_edges = np.concatenate((c_edges, c_edges[[1, 0], :]), axis=1)
-            self.edges.append(c_edges)
-        self.edges = np.concatenate(self.edges, axis=1)
-        self.edges = np.asarray(list(set(map(tuple, self.edges.T)))).T
-        self.edges = self.edges[:, self.edges[0, :].argsort()]
-
     def visualize(self, save_path):
         tsne = TSNE(n_components=2, random_state=42)
         x_tsne = tsne.fit_transform(self.x)
@@ -228,6 +203,7 @@ class RandomNodeDatset(object):
         plt.ylabel("Component 2")
         plt.savefig(save_path)
         plt.close()
+        
 
 class RandomGraphDatset(RandomNodeDatset):
     def __init__(self,
@@ -282,6 +258,7 @@ class RandomGraphDatset(RandomNodeDatset):
             ng_perclass + int(ng_perclass * np.random.choice(np.arange(-0.5, 0.5+0.25, 0.25)))
             for _ in range(self.num_gclass)
             ])
+        _, y_counts = np.unique(self.y, return_counts=True)
         self.all_graphs = []
         self.all_labels = []
         self.all_gsizes = {}
@@ -291,7 +268,6 @@ class RandomGraphDatset(RandomNodeDatset):
             c_probs.sort(key= lambda t: t[0])
             c_probs = np.array([p[1] for p in c_probs])
             # Compute probability of per class samples based on #sample in each class
-            _, y_counts = np.unique(self.y, return_counts=True)
             c_probs = c_probs/y_counts
             selec_prob = np.empty((num_nsamples,))
             last_idx = 0
@@ -316,7 +292,7 @@ class RandomGraphDatset(RandomNodeDatset):
                 graph, but we need to consider labeling nodes as well. We can do this as PyG does
                 to add a one-hot vector of the label to the feature vector of each node."""
                 rgraph.gen_xy(node_feats=self.x[sample_idxs, :], node_labels=self.y[sample_idxs])
-                rgraph.gen_edges(3, 0.2)
+                rgraph.edges = add_edges(self.y, 3, 0.2)
                 self.all_graphs.append(rgraph)
                 self.all_labels.append(i)
                 # self.all_graphs.append((sample_idxs, i))
@@ -452,7 +428,96 @@ def make_datasets(
         t_dataset.visualize("/content/CPrompt/tsne_destination.png")
     
     return s_dataset, t_dataset
+
+
+def add_edges(labels, p_intra_edge, p_inter_edge):
+    unique_labels = np.unique(labels)
+    p_intra_edge = to_prob_dict(unique_labels, p_intra_edge)
+    p_inter_edge = to_prob_dict(unique_labels, p_inter_edge)
+    edges = []
+    for c in unique_labels:
+        # Making intra-class edges
+        intra_idx = np.nonzero(labels == c)[0]
+        num_intra_edges = int(intra_idx.shape[0] * p_intra_edge[c])
+        intra_s = np.random.choice(intra_idx, num_intra_edges, replace=True)
+        intra_t = np.random.choice(intra_idx, num_intra_edges, replace=True)
+        not_loops_mask = (intra_s != intra_t)
+        intra_s = intra_s[not_loops_mask]
+        intra_t = intra_t[not_loops_mask]
+        intra_edges = np.stack((intra_s, intra_t))
+        # Making inter-class edges
+        inter_idx = np.nonzero(labels != c)[0]
+        num_inter_edges = int(inter_idx.shape[0] * p_inter_edge[c])
+        inter_s = np.random.choice(intra_idx, num_inter_edges, replace=True)
+        inter_t = np.random.choice(inter_idx, num_inter_edges, replace=True)
+        inter_edges = np.stack((inter_s, inter_t))
+        # Class edges
+        c_edges = np.concatenate((intra_edges, inter_edges), axis=1)
+        c_edges = np.concatenate((c_edges, c_edges[[1, 0], :]), axis=1)
+        edges.append(c_edges)
+    edges = np.concatenate(edges, axis=1)
+    edges = np.asarray(list(set(map(tuple, edges.T)))).T
+    edges = edges[:, edges[0, :].argsort()]
+    return edges
+
+
+def to_prob_dict(labels, p):
+    if not isinstance(p, dict):
+        p = dict(zip(labels, np.ones(labels.shape[0]) * p))
+    return p
+
+
+def remove_edges(labels, edges, p_intra_edge, p_inter_edge):
     
+    def get_drop_mask(mask, p):
+        edge_idxs = mask.nonzero()[0]
+        num_retained_edges = int(edge_idxs.shape[0] * (1 - p))
+        perm = np.random.permutation(edge_idxs.shape[0])[:num_retained_edges]
+        retained_idxs = edge_idxs[perm]
+        mask[retained_idxs] = False
+        return ~mask
+        
+    unique_labels = np.unique(labels)
+    p_intra_edge = to_prob_dict(unique_labels, p_intra_edge)
+    p_inter_edge = to_prob_dict(unique_labels, p_inter_edge)
+    overal_mask = np.ones(edges.shape[1]).astype(bool)
+    for c in unique_labels:
+        intra_idx = np.nonzero(labels == c)[0]
+        intra_mask = np.isin(edges, intra_idx)
+        indicator_sum = intra_mask.sum(axis=0)
+        intra_mask = (indicator_sum == 2)
+        inter_mask = (indicator_sum == 1)
+        intra_mask = get_drop_mask(intra_mask, p_intra_edge[c])
+        inter_mask = get_drop_mask(inter_mask, p_inter_edge[c])
+        overal_mask = overal_mask * intra_mask * inter_mask
+    edges = edges[:, ~overal_mask]
+    return edges
+
+
+def add_structural_noise(data, p_intra = None, p_inter = None, drop = False, add = False):
+    labels = data.y.numpy()
+    edges = data.edge_index.numpy()
+    unique_labels = np.unique(labels)
+    n_classes = unique_labels.shape[0]
+    if isinstance(p_intra, float) or isinstance(p_inter, float):
+        p_intra = {
+            unique_labels[i]: np.randome.choice(np.array([-p_intra, 0.0, p_intra]), n_classes, replace=True) 
+            for i in range(n_classes)
+        }
+        p_inter = {
+            unique_labels[i]: np.randome.choice(np.array([-p_inter, 0.0, p_inter]), n_classes, replace=True) 
+            for i in range(n_classes)
+        }
+    add_p_intra = {key:value if value > 0.0 else 0.0 for key, value in p_intra.items()}
+    add_p_inter = {key:value if value > 0.0 else 0.0 for key, value in p_inter.items()}
+    drop_p_intra = {key:np.abs(value) if value < 0.0 else 0.0 for key, value in p_intra.items()}
+    drop_p_inter = {key:np.abs(value) if value < 0.0 else 0.0 for key, value in p_inter.items()}
+    pruned_edges = remove_edges(labels, edges, drop_p_intra, drop_p_inter)
+    new_edges = add_edges(labels, add_p_intra, add_p_inter)
+    edges = np.concatenate((pruned_edges, new_edges))
+    data.edge_index = torch.as_tensor(edges)
+    return data
+
 
 class GDataset(nn.Module):
     def __init__(self,):
