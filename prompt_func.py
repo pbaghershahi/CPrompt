@@ -106,13 +106,15 @@ class PromptTrainer():
             initc = initc / (1e-8 + ps_probs.sum(axis=0)[:,None])
             dd = cdist(ps_embds, initc, 'cosine')
             pred_label = dd.argmin(axis=1)
-        ps_probs = torch.as_tensor(np.eye(prompt_out.size(1))[pred_label, :], device = device)
-        # ps_probs = F.softmax(torch.as_tensor(1 - dd, device = device), dim=1)
+        # ps_probs = torch.as_tensor(np.eye(prompt_out.size(1))[pred_label, :], device = device)
+        ps_probs = F.softmax(torch.as_tensor(1 - dd, device = device), dim=1)
         loss = self.obj_fun(prompt_out, ps_probs)
         # softmax_out = F.softmax(prompt_out, dim=1)
         # loss += entropy_loss(softmax_out).mean()
         # b_softmax = softmax_out.mean(dim=0)
         # loss += torch.sum(b_softmax * torch.log(b_softmax + 1e-5))
+        # loss += self.domain_loss(discriminator, pos_batch, prompt_batch, device)
+
         if self.training_config["r_reg"] > 0.0 and prompt_model.prompt_fn == "add_tokens":
             loss += self.training_config["r_reg"] * prompt_model.token_embeds.pow(2).mean()
         return loss
@@ -128,6 +130,28 @@ class PromptTrainer():
         if self.training_config["r_reg"] > 0.0 and not prompt_model.trans_x:
             loss += self.training_config["r_reg"] * prompt_model.token_embeds.pow(2).mean()
         return loss
+
+    def domain_loss(self, discriminator, pos_batch, prompt_batch, device):
+        """ 
+        TODO: This function is not complete. So Far it just trains the discriminator. 
+        But I have to apply the adverserial too. For that I need to first make all requires_grads
+        for every params of the discriminator equal to False, then train make 1s labels 
+        for prompted graphs and apply the BCE loss for to increase the possibilies of the prompted graphs.
+        """
+        if isinstance(pos_batch, Batch):
+            pos_batch = Batch.to_data_list(pos_batch)
+        if isinstance(prompt_batch, Batch):
+            prompt_batch = Batch.to_data_list(prompt_batch)
+        batch = Batch.from_data_list(pos_batch + prompt_batch)
+        labels = torch.ones((len(pos_batch),), dtype=torh.float, device = device) + \
+        torch.zeros((len(prompt_batch),), dtype=torh.float, device = device)
+        print(batch, batch.detach())
+        out, _ = discriminator(
+            batch,
+            decoder = True,
+            device = device
+        )
+        loss = F.binary_cross_entropy(F.sigmoid(out), labels)
         
     def train(self, t_dataset, pretrained_model, prompt_model, optimizer, device, logger) -> None:
         for i, batch in enumerate(t_dataset.train_loader):
