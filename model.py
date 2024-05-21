@@ -4,39 +4,80 @@ import torch.nn.functional as F
 import numpy as np
 import matplotlib.pyplot as plt
 from torch_geometric.data import Data, Batch
-from torch_geometric.nn import GCNConv, GCN, global_mean_pool
+from torch_geometric.nn import GCNConv, GINConv, SAGEConv, GATConv, GCN, global_mean_pool
 from typing import List
 from utils import *
+import ipdb
 
 
 class PretrainedModel(nn.Module):
-    def __init__(self, d_feat, d_hid, d_class, n_layers, r_dropout, *args, **kwargs) -> None:
+    def __init__(
+            self, gnn_type,
+            in_channels, 
+            hidden_channels, 
+            out_channels, 
+            num_layers = 2,
+            dropout = 0.0, 
+            with_bn = False,
+            with_head = True,
+            *args, 
+            **kwargs
+        ) -> None:
         super(PretrainedModel, self).__init__(*args, **kwargs)
-        self.gnn_modul = GCN(
-            in_channels = d_feat,
-            hidden_channels = d_hid,
-            num_layers = n_layers,
-            out_channels = d_hid,
-            dropout = .2,
-            act = "relu",
-            norm = None
-        )
-        self.r_dropout = r_dropout
-        self.decoder = nn.Linear(d_hid, d_class)
-
-    def forward(self, graph_batch: Batch, decoder = True, device = None):
-        if not isinstance(graph_batch, Batch):
+        self.gnn_type = gnn_type
+        self.num_layers = num_layers
+        self.dropout = dropout
+        self.with_bn = with_bn
+        self.with_head = with_head
+        self.gnn_layers = nn.ModuleList([self.get_gnn_layer(gnn_type, in_channels, hidden_channels)])
+        if with_bn:
+            self.bns = nn.ModuleList([nn.BatchNorm1d(hidden_channels)])
+        num_hid_layer = num_layers - 1 if with_head else num_layers - 2
+        for _ in range(num_hid_layer):
+            self.gnn_layers.append(self.get_gnn_layer(gnn_type, hidden_channels, hidden_channels))
+            if with_bn:
+                self.bns.append(nn.BatchNorm1d(hidden_channels))
+        if with_head:
+            self.linear_decoder = nn.Linear(hidden_channels, out_channels)
+        else:
+            self.gnn_decoder = self.get_gnn_layer(gnn_type, hidden_channels, out_channels)
+    
+    def get_gnn_layer(self, gnn_type, in_channels, out_channels):
+        if gnn_type == "gcn":
+            return GCNConv(in_channels, out_channels)
+        elif gnn_type == "gat":
+            return GATConv(in_channels, out_channels)
+        elif gnn_type == "gin":
+            return GINConv(nn.Sequential(nn.Linear(in_channels, out_channels)))
+        elif gnn_type == "sage":
+            return SAGEConv(in_channels, out_channels)
+        else:
+            raise Exception("The model is not implemented!")
+    
+    def forward(self, graph_batch, decoder = True, device = None):
+        if isinstance(graph_batch, list):
             graph_batch = Batch.from_data_list(graph_batch)
         if device is not None:
             graph_batch = graph_batch.to(device)
         if not decoder:
             scores = self.decoder(graph_batch)
             return scores, "embeds"
-        x = self.gnn_modul(graph_batch.x, graph_batch.edge_index)
-        x = global_mean_pool(x, graph_batch.batch)
-        scores = self.decoder(F.dropout(x, p=self.r_dropout, training=self.training))
+        x = graph_batch.x
+        for i, layer in enumerate(self.gnn_layers):
+            x = layer(x, graph_batch.edge_index)
+            x = self.bns[i](x) if self.with_bn else x
+            x = F.relu(x)
+            if i < len(self.gnn_layers) - 1:
+                x = F.dropout(x, p=self.dropout, training=self.training)
+        if not self.with_head:
+            x = F.dropout(x, p=self.dropout, training=self.training)
+            x = self.gnn_decoder(x, graph_batch.edge_index)
+        scores = global_mean_pool(x, graph_batch.batch)
+        if self.with_head:
+            scores = F.dropout(scores, p=self.dropout, training=self.training)
+            scores = self.linear_decoder(scores)
         return scores, x
-
+    
 
 class BasePrompt(nn.Module):
     def __init__(self,

@@ -4,7 +4,7 @@ from data_utils import *
 import yaml
 import argparse
 
-def main(args):
+def main(args) -> None:
     os.makedirs('./log', exist_ok=True)
     os.makedirs('./config', exist_ok=True)
     exec_name = datetime.today().strftime('%Y-%m-%d-%H-%M-%S')
@@ -76,40 +76,43 @@ def main(args):
 
     model_name = "GCN"
     model_config = dict(
-        d_feat = s_dataset.n_feats,
-        d_hid = args.pretrain_h_dim,
-        d_class = s_dataset.num_gclass,
-        n_layers = 2, r_dropout = 0.2
+        gnn_type = args.gnn_type,
+        in_channels = s_dataset.n_feats,
+        hidden_channels = args.gnn_h_dim,
+        out_channels = s_dataset.num_gclass,
+        num_layers = args.gnn_num_layers, 
+        dropout = args.gnn_dropout,
+        with_bn = False,
+        with_head = True,
     )
     optimizer_config = dict(
-        lr = args.pretrain_lr,
-        scheduler_step_size = args.pretrain_step_size,
-        scheduler_gamma = args.pretrain_lr
+        lr = args.gnn_lr,
+        scheduler_step_size = args.gnn_step_size,
+        scheduler_gamma = args.gnn_gamma
     )
     training_config = dict(
-        n_epochs = args.pretrain_n_epochs
+        n_epochs = args.gnn_n_epochs
     )
     logger.info(f"Setting for pretraining: Model: {model_config} -- Optimizer: {optimizer_config} -- Training: {training_config}")
 
     if args.pretrain:
-        logger.info(f"Pretraining {model_name} on {args.s_dataset} started for {args.pretrain_n_epochs} epochs")
+        logger.info(f"Pretraining {model_name} on {args.s_dataset} started for {args.gnn_n_epochs} epochs")
         _, pretrained_path = pretrain_model(
-        s_dataset,
-        # t_dataset,
-        model_name,
-        model_config,
-        optimizer_config,
-        training_config,
-        logger,
-        eval_step = args.pretrain_eval_step,
-        save_model = args.save_pretrained,
-        pretext_task = "classification",
-        model_dir = "./pretrained",
-        empty_pretrained_dir = args.empty_pretrained_dir
+            s_dataset,
+            model_name,
+            model_config,
+            optimizer_config,
+            training_config,
+            logger,
+            eval_step = args.gnn_eval_step,
+            save_model = args.save_pretrained,
+            pretext_task = "classification",
+            model_dir = "./pretrained",
+            empty_pretrained_dir = args.empty_pretrained_dir
         )
         logger.info(f"Pretraining is finished! Saved to: {pretrained_path}")
     else:
-        pretrained_path = args.pretrain_path
+        pretrained_path = args.gnn_path
         logger.info(f"Using previous pretrained model at {pretrained_path}")
 
     pretrained_config = model_config
@@ -187,3 +190,65 @@ def main(args):
         num_runs = args.num_runs,
         eval_step = args.eval_step
     )
+
+
+if __name__ == "__main__":
+    args = argparse.Namespace(
+        pretrain = True,
+        # prompt_method = "contrastive",
+        prompt_method = "pseudo_labeling",
+        # prompt_method = "all_in_one",
+        prompt_fn = "add_tokens",
+        # dataset = "ego_network",
+        # s_dataset = "ENZYMES",
+        # t_dataset = "ENZYMES",
+        # s_dataset = "PROTEINS_full",
+        # t_dataset = "PROTEINS_full",
+        s_dataset = "Cora",
+        t_dataset = "Cora",
+        # s_dataset = "CiteSeer",
+        # t_dataset = "CiteSeer",
+        # s_dataset = "digg",
+        # t_dataset = "oag",
+        # s_dataset = "Letter-low",
+        # t_dataset = "Letter-high",
+        gnn_type = "gcn",
+        gnn_num_layers = 2,
+        gnn_path = "./pretrained/GCN_Pretrained_2024-05-17-19-19-13.pth",
+        gnn_n_epochs = 150,
+        gnn_eval_step = 10,
+        gnn_h_dim = 256,
+        gnn_lr = 1e-3,
+        gnn_step_size = 100,
+        gnn_gamma = 0.5,
+        gnn_batch_size = 32,
+        gnn_dropout = 0.2,
+        save_pretrained = True,
+        batch_size = 32,
+        lr = 1e-3,
+        step_size = 100,
+        gamma = 0.75,
+        aug_type = "feature",
+        pos_aug_mode = "mask",
+        neg_aug_mode = "arbitrary",
+        h_dim = 256,
+        add_link_loss = False,
+        empty_pretrained_dir = False,
+        noise_cov_scale = 2,
+        noise_mean_shift = 2,
+        cross_prune = 0.1,
+        inner_prune = 0.3,
+        trans_x = False,
+        n_epochs = 200,
+        num_runs = 5,
+        eval_step = 5,
+        p_raug = 0.15,
+        n_raug = 0.15,
+        r_reg = 0.2,
+        train_per = 0.7,
+        test_per = 0.2,
+        seed = 4321,
+        config_from_file = "",
+        config_to_file = "./config/cora.yaml"
+    )
+    main(args)

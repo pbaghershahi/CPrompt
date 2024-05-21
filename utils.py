@@ -260,7 +260,7 @@ def test(model, dataset, device, task, mode, pmodel = None, validation = True):
         test_loss /= n_samples
         test_acc = int((labels == preds).sum()) / n_samples
         test_f1 = f1(preds.detach().cpu(), labels.detach().cpu())
-    return test_loss, test_acc, test_f1
+    return test_loss, test_acc, test_f1.item()
 
 def get_subgraph(graph, node_indices):
     node_indices = np.sort(node_indices)
@@ -381,6 +381,13 @@ def empty_directory(directory):
                 os.rmdir(filepath)
         except Exception as e:
             print(f"Failed to delete {filepath}: {e}")
+
+class DummyLogger():
+    def __init__(self) -> None:
+        pass
+
+    def info(self, log_content):
+        print(log_content)
 
 """
 Contrastive loss between two augmented graphs of one original graph

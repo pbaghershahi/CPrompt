@@ -1,10 +1,12 @@
 import torch, random, os, ipdb
 import torch.nn as nn
 import torch.nn.functional as F
+import numpy as np
 from datetime import datetime
 from torch.optim import Adam
 from torch.optim.lr_scheduler import StepLR
-import numpy as np
+from ray import tune, train
+from ray.train import Checkpoint, RunConfig
 from utils import *
 from data_utils import *
 from prompt_func import *
@@ -21,7 +23,8 @@ def pretrain_model(
     save_model = True, 
     pretext_task = "classification",
     model_dir = "./pretrained",
-    empty_pretrained_dir = False
+    empty_pretrained_dir = False,
+    tunning = False,
 ):
     task = "multi" if s_dataset.num_gclass > 2 else "binary"
     if model_name == "GCN":
@@ -58,12 +61,14 @@ def pretrain_model(
         scheduler.step()
         optimizer.zero_grad()
 
-        if epoch % eval_step == 0:
+        if epoch % eval_step == 0 and epoch > 0:
             valid_loss, valid_acc, valid_f1 = test(model, s_dataset, device, task = task, mode = "pretrain", validation = True)
             logger.info(
                 f"Epoch: {epoch}/{n_epochs} -- Train Loss: {loss:.3f} -- " +
                 f"Validation Loss: {valid_loss:.3f} -- Validation ACC: {valid_acc:.3f} -- Validation F1: {valid_f1:.3f}"
             )
+            if tunning:
+                train.report({"acc": valid_acc, "f1-score": valid_f1})
 
     test_loss, test_acc, test_f1 = test(model, s_dataset, device, task = task, mode = "pretrain", validation = False)
     logger.info(

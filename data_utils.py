@@ -37,6 +37,33 @@ def add_multivariate_noise(dataset, mean_shift, cov_scale, inplace=True) -> None
     dataset.x += torch.as_tensor(noise, dtype=torch.float, device=dataset.x.device)
     return dataset
 
+
+class DomianShift():
+    def __init__(self, n_domains=2, *args, **kwargs) -> None:
+        self.n_domains = n_domains
+
+    @classmethod
+    def save_to_file(cls, dataset_name, domain_idx_dict, dir_path=None):
+        if dir_path is None:
+            dir_path = f"./files/{dataset_name}/domain_indicies"
+        os.makedirs(dir_path, exist_ok=True)
+        files_path = os.path.join(dir_path, f"domain_idicies.txt")
+        with open(files_path, "w") as f_handle:
+            for domain_id, idxs in domain_idx_dict.items():
+                line = f"{domain_id}: "
+                line += " ".join(idxs.cpu().numpy().astype(str).tolist())
+                f_handle.write(line + "\n")
+        return files_path
+
+    @classmethod
+    def load_from_file(cls, filename_):
+        with open(filename_, "r") as f_handle:
+            domain_idx_dict = dict()
+            for line in f_handle.readlines():
+                domain_id, idxs = line.strip().split(":")
+                domain_idx_dict[int(domain_id)] = torch.as_tensor(np.array(idxs.strip(" ").split(" ")).astype(np.int64))
+        return domain_idx_dict
+    
     
 class GraphClassification(Dataset):
     def __init__(self, graph, train_per=0.85, test_per=0.15) -> None:
@@ -1130,6 +1157,8 @@ def get_graph_dataset(
     perm = torch.randperm(ntotal_graphs)
     s_perm = perm[:int(ntotal_graphs*0.5)]
     t_perm = perm[int(ntotal_graphs*0.5):]
+    domain_idx_dict = {0:s_perm, 1:t_perm}
+    DomianShift.save_to_file(ds_name, domain_idx_dict)
     s_ds = dataset.copy(s_perm)
     t_ds = dataset.copy(t_perm)
 
