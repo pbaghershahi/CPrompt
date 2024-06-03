@@ -29,12 +29,30 @@ def graph_collate(batch):
     return g_batch
 
 
-def add_multivariate_noise(dataset, mean_shift, cov_scale, inplace=True) -> None:
-    n_samples, n_feats = dataset.x.size()
+def add_multivariate_noise(features, mean_shift, cov_scale) -> None:
+    n_samples, n_feats = features.size()
     mean = np.ones(n_feats) * mean_shift
     cov_matrix = np.eye(n_feats) * cov_scale
     noise = np.random.multivariate_normal(mean, cov_matrix, n_samples)
-    dataset.x += torch.as_tensor(noise, dtype=torch.float, device=dataset.x.device)
+    features += torch.as_tensor(noise, dtype=torch.float, device=features.device)
+    return features
+
+
+def graph_ds_add_noise(dataset, mean_shift = None, cov_scale = None):
+    x_idxs = dataset.slices["x"]
+    for class_id in range(dataset.num_classes):
+        if mean_shift == None:
+            mean_shift = np.random.uniform(-2, 2)
+        else:
+            mean_shift = np.random.uniform(-mean_shift, mean_shift)
+        cov_scale = 1. if cov_scale is None else cov_scale
+        temp_idxs = (dataset.y == class_id).nonzero().T[0]
+        temp_idxs = torch.cat((x_idxs[temp_idxs][:, None], x_idxs[temp_idxs+1][:, None]), dim=1)
+        class_idxs = []
+        for i in range(temp_idxs.size(0)):
+            class_idxs.append(torch.arange(temp_idxs[i, 0], temp_idxs[i, 1]))
+        class_idxs = torch.cat(class_idxs)
+        dataset.x[class_idxs, :] = add_multivariate_noise(dataset.x[class_idxs, :], mean_shift, cov_scale)
     return dataset
 
 
@@ -521,18 +539,18 @@ def remove_edges(labels, edges, p_intra_edge, p_inter_edge):
     return edges
 
 
-def add_structural_noise(data, p_intra = None, p_inter = None, drop = False, add = False):
+def add_structural_noise(data, p_intra = None, p_inter = None):
     labels = data.y.numpy()
     edges = data.edge_index.numpy()
     unique_labels = np.unique(labels)
     n_classes = unique_labels.shape[0]
     if isinstance(p_intra, float) or isinstance(p_inter, float):
         p_intra = {
-            unique_labels[i]: np.randome.choice(np.array([-p_intra, 0.0, p_intra]), n_classes, replace=True) 
+            unique_labels[i]: np.random.choice(np.array([-p_intra, 0.0, p_intra]), replace=True) 
             for i in range(n_classes)
         }
         p_inter = {
-            unique_labels[i]: np.randome.choice(np.array([-p_inter, 0.0, p_inter]), n_classes, replace=True) 
+            unique_labels[i]: np.random.choice(np.array([-p_inter, 0.0, p_inter]), replace=True) 
             for i in range(n_classes)
         }
     add_p_intra = {key:value if value > 0.0 else 0.0 for key, value in p_intra.items()}
@@ -541,7 +559,7 @@ def add_structural_noise(data, p_intra = None, p_inter = None, drop = False, add
     drop_p_inter = {key:np.abs(value) if value < 0.0 else 0.0 for key, value in p_inter.items()}
     pruned_edges = remove_edges(labels, edges, drop_p_intra, drop_p_inter)
     new_edges = add_edges(labels, add_p_intra, add_p_inter)
-    edges = np.concatenate((pruned_edges, new_edges))
+    edges = np.concatenate((pruned_edges, new_edges), axis=1)
     data.edge_index = torch.as_tensor(edges)
     return data
 
@@ -711,7 +729,7 @@ class NodeToGraphDataset(GDataset):
                 self.test_ds._data.x, dim=0, 
                 mode=normalize_mode, normal_params = train_normal_params)
 
-    def init_loaders_(self, loader_collate, batch_size):
+    def init_loaders_(self, batch_size, loader_collate = graph_collate):
         self.train_loader = DataLoader(self.train_ds, batch_size=batch_size, shuffle=True, collate_fn=loader_collate, num_workers=1)
         self.valid_loader = DataLoader(self.valid_ds, batch_size=batch_size, shuffle=False, collate_fn=loader_collate, num_workers=1)
         self.test_loader = DataLoader(self.test_ds, batch_size=batch_size, shuffle=False, collate_fn=loader_collate, num_workers=1)
@@ -745,7 +763,7 @@ class NodeToGraphDataset(GDataset):
             )
         if normalize_mode is not None:
             self.normalize_feats_(normalize_mode)
-        self.init_loaders_(loader_collate, batch_size)
+        self.init_loaders_(batch_size, loader_collate)
 
 
 def load_w2v_feature(file, max_idx=0):
@@ -849,7 +867,7 @@ class EgoNetworkDataset(GDataset):
                 self._data.vertex_features[self.test_idxs, :],
                 dim=0, mode=normalize_mode, normal_params = train_normal_params_vfeat)
 
-    def init_loaders_(self, loader_collate, batch_size):
+    def init_loaders_(self, batch_size, loader_collate = graph_collate):
         self.train_loader = DataLoader(
             self._data,
             batch_size = batch_size,
@@ -889,7 +907,7 @@ class EgoNetworkDataset(GDataset):
         )
         if normalize_mode is not None:
             self.normalize_feats_(normalize_mode)
-        self.init_loaders_(loader_collate, batch_size)
+        self.init_loaders_(batch_size, loader_collate)
 
 
 class FromPyGGraph(GDataset):
@@ -914,7 +932,7 @@ class FromPyGGraph(GDataset):
         for i in range(x_idxs.size(0)-1):
             g = dataset[i]
             temp_g = Data(
-                x = dataset.x[x_idxs[i]:x_idxs[i+1], :], 
+                x = dataset._data.x[x_idxs[i]:x_idxs[i+1], :], 
                 edge_index = g.edge_index, y = g.y
             )
             all_graphs.append(temp_g)
@@ -927,7 +945,7 @@ class FromPyGGraph(GDataset):
         if self.n_test > 0:
             self.test_ds._data.x, _ = normalize_(self.test_ds._data.x, dim=0, mode=normalize_mode, normal_params = train_normal_params)
         
-    def init_loaders_(self, loader_collate, batch_size):
+    def init_loaders_(self, batch_size, loader_collate = graph_collate):
         self.train_loader = DataLoader(self.train_ds, batch_size=batch_size, shuffle=True, collate_fn=loader_collate, num_workers=1)
         self.valid_loader = DataLoader(self.valid_ds, batch_size=batch_size, shuffle=False, collate_fn=loader_collate, num_workers=1)
         self.test_loader = DataLoader(self.test_ds, batch_size=batch_size, shuffle=False, collate_fn=loader_collate, num_workers=1)
@@ -955,266 +973,303 @@ class FromPyGGraph(GDataset):
         self.train_ds = SimpleDataset(self.gen_graph_ds(self.train_ds))
         self.valid_ds = SimpleDataset(self.gen_graph_ds(self.valid_ds))
         self.test_ds = SimpleDataset(self.gen_graph_ds(self.test_ds))
-        self.init_loaders_(loader_collate, batch_size)
+        self.init_loaders_(batch_size, loader_collate)
         
 
-def get_pyggda_dataset(
-        sds_name,
-        tds_name,
+class GenDataset(object):
+    def __init__(self, logger) -> None:
+        self.logger = logger
+
+    def get_graph_da_dataset(
+            self,
+            sds_name,
+            tds_name,
+            store_to_path = "./data",
+            train_per = 0.80,
+            test_per = 0.20,
+            batch_size = 32,
+            norm_mode = "max",
+            node_attributes = True,
+            seed = 2411
+            ):
+
+        s_dataset = TUDataset(
+            root = store_to_path,
+            name = sds_name,
+            use_node_attr = node_attributes
+        )
+        s_dataset = FromPyGGraph(s_dataset)
+        s_dataset.initialize(
+            train_test_split = [train_per, test_per],
+            batch_size = batch_size,
+            normalize_mode = norm_mode,
+            shuffle = True,
+            seed = seed
+        )
+
+        t_dataset = TUDataset(
+            root = store_to_path,
+            name = tds_name,
+            use_node_attr = node_attributes
+        )
+        t_dataset = FromPyGGraph(t_dataset)
+        t_dataset.initialize(
+            train_test_split = [train_per, test_per],
+            batch_size = batch_size,
+            normalize_mode = norm_mode,
+            shuffle = True,
+            seed = seed
+        )
+        return s_dataset, t_dataset 
+
+
+    def get_node_da_dataset(
+            self,
+            sds_name,
+            tds_name,
+            store_to_path = "./data",
+            train_per = 0.80,
+            test_per = 0.20,
+            batch_size = 32,
+            norm_mode = "max",
+            n_hopes = 2,
+            node_attributes = True
+            ):
+
+        s_dataset = Airports(
+            root = store_to_path,
+            name = sds_name,
+        )
+        s_dataset = NodeToGraphDataset(
+            s_dataset,
+            n_hopes = n_hopes
+            )
+        s_dataset.initialize(
+            train_test_split = [train_per, test_per],
+            batch_size = batch_size,
+            normalize_mode = norm_mode,
+            shuffle = False
+            )
+
+        t_dataset = Airports(
+            root = store_to_path,
+            name = tds_name,
+            )
+        t_dataset = NodeToGraphDataset(
+            t_dataset,
+            n_hopes = n_hopes
+            )
+        t_dataset.initialize(
+            train_test_split = [train_per, test_per],
+            batch_size = batch_size,
+            normalize_mode = norm_mode,
+            shuffle = False
+            )
+        return s_dataset, t_dataset
+
+
+    def get_node_dataset(
+        self,
+        ds_name,
+        shift_type = "structural",
+        p_intra = 0.0,
+        p_inter = 0.0,
+        cov_scale = 2,
+        mean_shift = 0,
+        shift_mode = "class_wise",
+        train_per = 0.85,
+        test_per = 0.15,
+        batch_size = 32,
+        n_hopes = 2,
+        norm_mode = "max",
+        node_attributes = True,
+        seed = 2411
+    ):
+
+        """ Currently supported datasets:
+            - Cora_
+        """
+        dataset = Planetoid(
+            root = f'data/{ds_name}',
+            name = ds_name
+            )
+
+        ntotal_graphs = dataset._data.size(0)
+        train_idxs = torch.nonzero(dataset._data.train_mask).view(-1)
+        valid_idxs = torch.nonzero(dataset._data.val_mask).view(-1)
+        test_idxs = torch.nonzero(dataset._data.test_mask).view(-1)
+        other_mask = ~dataset._data.train_mask.logical_or(dataset._data.val_mask).logical_or(dataset._data.test_mask)
+        other_idxs = torch.nonzero(other_mask).view(-1)
+        n_train = train_idxs.size(0)
+        n_val = valid_idxs.size(0)
+        n_test = test_idxs.size(0)
+        n_other = other_idxs.size(0)
+        fix_seed(seed)
+        train_perm = torch.randperm(n_train)
+        valid_perm = torch.randperm(n_val)
+        test_perm = torch.randperm(n_test)
+        other_perm = torch.randperm(n_other)
+        s_perm = torch.cat([
+            train_idxs[train_perm[:n_train//2]],
+            valid_idxs[valid_perm[:n_val//2]],
+            test_idxs[test_perm[:n_test//2]],
+            other_idxs[other_perm[:n_other//2]],
+            ])
+        t_perm = torch.cat([
+            train_idxs[train_perm[n_train//2:]],
+            valid_idxs[valid_perm[n_val//2:]],
+            test_idxs[test_perm[n_test//2:]],
+            other_idxs[other_perm[n_other//2:]],
+            ])
+        s_data = deepcopy(dataset._data.subgraph(s_perm))
+        t_data = deepcopy(dataset._data.subgraph(t_perm))
+        s_dataset = NodeToGraphDataset(
+            s_data,
+            n_hopes = n_hopes
+            )
+        s_n_train = train_perm[:n_train//2].size(0)
+        s_n_valid = valid_perm[:n_val//2].size(0)
+        s_n_test = test_perm[:n_test//2].size(0)
+        s_dataset.initialize(
+            train_idxs = torch.arange(s_n_train),
+            valid_idxs = torch.arange(s_n_train, s_n_train + s_n_valid),
+            test_idxs = torch.arange(s_n_train + s_n_valid, s_n_train + s_n_valid + s_n_test),
+            batch_size = batch_size,
+            normalize_mode = norm_mode,
+            shuffle = False
+            )
+        if shift_type == "feature":
+            if shift_mode == "class_wise":
+                t_data = graph_ds_add_noise(t_data, mean_shift, cov_scale)
+            else:
+                t_data.x[torch.arange(t_data.x.size(0)), :] = add_multivariate_noise(
+                    t_data.x[torch.arange(t_data.x.size(0)), :], mean_shift, cov_scale
+                )
+        elif shift_type == "structural":
+            t_data = add_structural_noise(t_data, p_intra, p_inter)
+        else:
+            print("shift type is not implemented yet")
+        t_dataset = NodeToGraphDataset(
+            t_data,
+            n_hopes = n_hopes
+            )
+        t_n_train = train_perm[n_train//2:].size(0)
+        t_n_valid = valid_perm[n_val//2:].size(0)
+        t_n_test = test_perm[n_test//2:].size(0)
+        t_dataset.initialize(
+            train_idxs = torch.arange(t_n_train),
+            valid_idxs = torch.arange(t_n_train, t_n_train + t_n_valid),
+            test_idxs = torch.arange(t_n_train + t_n_valid, t_n_train + t_n_valid + t_n_test),
+            batch_size = batch_size,
+            normalize_mode = norm_mode,
+            shuffle = False
+            )
+        
+        return s_dataset, t_dataset
+
+
+    def get_graph_dataset(
+        self,
+        ds_name,
+        shift_type = "structural",
+        p_intra = 0.0,
+        p_inter = 0.0,
+        cov_scale = 2,
+        mean_shift = 0,
+        shift_mode = "class_wise",
         store_to_path = "./data",
         train_per = 0.80,
         test_per = 0.20,
         batch_size = 32,
         norm_mode = "max",
         node_attributes = True,
-        seed = 2411
-        ):
-
-    s_dataset = TUDataset(
-        root = store_to_path,
-        name = sds_name,
-        use_node_attr = node_attributes
-    )
-    s_dataset = FromPyGGraph(s_dataset)
-    s_dataset.initialize(
-        train_test_split = [train_per, test_per],
-        batch_size = batch_size,
-        normalize_mode = norm_mode,
-        shuffle = True,
-        seed = seed
-    )
-
-    t_dataset = TUDataset(
-        root = store_to_path,
-        name = tds_name,
-        use_node_attr = node_attributes
-    )
-    t_dataset = FromPyGGraph(t_dataset)
-    t_dataset.initialize(
-        train_test_split = [train_per, test_per],
-        batch_size = batch_size,
-        normalize_mode = norm_mode,
-        shuffle = True,
-        seed = seed
-    )
-    return s_dataset, t_dataset 
-
-
-def get_pyg_node_gda_dataset(
-        sds_name,
-        tds_name,
-        store_to_path = "./data",
-        train_per = 0.80,
-        test_per = 0.20,
-        batch_size = 32,
-        norm_mode = "max",
-        n_hopes = 2,
-        node_attributes = True
-        ):
-
-    s_dataset = Airports(
-        root = store_to_path,
-        name = sds_name,
-    )
-    s_dataset = NodeToGraphDataset(
-        s_dataset,
-        n_hopes = n_hopes
-        )
-    s_dataset.initialize(
-        train_test_split = [train_per, test_per],
-        batch_size = batch_size,
-        normalize_mode = norm_mode,
-        shuffle = False
+        seed = 2411,
+    ):
+        
+        """ Currently supported datasets: 
+            - ENZYMES
+            - PROTEINS_full
+        """
+        dataset = TUDataset(
+            root = store_to_path,
+            name = ds_name,
+            use_node_attr = node_attributes
         )
 
-    t_dataset = Airports(
-        root = store_to_path,
-        name = tds_name,
-        )
-    t_dataset = NodeToGraphDataset(
-        t_dataset,
-        n_hopes = n_hopes
-        )
-    t_dataset.initialize(
-        train_test_split = [train_per, test_per],
-        batch_size = batch_size,
-        normalize_mode = norm_mode,
-        shuffle = False
-        )
-    return s_dataset, t_dataset
+        ntotal_graphs = len(dataset)
+        fix_seed(seed)
+        perm = torch.randperm(ntotal_graphs)
+        s_perm = perm[:int(ntotal_graphs*0.5)]
+        t_perm = perm[int(ntotal_graphs*0.5):]
+        domain_idx_dict = {0:s_perm, 1:t_perm}
+        DomianShift.save_to_file(ds_name, domain_idx_dict)
+        s_ds = dataset.copy(s_perm)
+        t_ds = dataset.copy(t_perm)
 
-
-def get_node_dataset(
-    ds_name,
-    cov_scale = 2,
-    mean_shift = 0,
-    train_per = 0.85,
-    test_per = 0.15,
-    batch_size = 32,
-    n_hopes = 2,
-    norm_mode = "max",
-    node_attributes = True,
-    seed = 2411
-):
-
-    """ Currently supported datasets:
-        - Cora_
-    """
-    dataset = Planetoid(
-        root = f'data/{ds_name}',
-        name = ds_name
-        )
-
-    ntotal_graphs = dataset._data.size(0)
-    train_idxs = torch.nonzero(dataset._data.train_mask).view(-1)
-    valid_idxs = torch.nonzero(dataset._data.val_mask).view(-1)
-    test_idxs = torch.nonzero(dataset._data.test_mask).view(-1)
-    other_mask = ~dataset._data.train_mask.logical_or(dataset._data.val_mask).logical_or(dataset._data.test_mask)
-    other_idxs = torch.nonzero(other_mask).view(-1)
-    n_train = train_idxs.size(0)
-    n_val = valid_idxs.size(0)
-    n_test = test_idxs.size(0)
-    n_other = other_idxs.size(0)
-    fix_seed(seed)
-    train_perm = torch.randperm(n_train)
-    valid_perm = torch.randperm(n_val)
-    test_perm = torch.randperm(n_test)
-    other_perm = torch.randperm(n_other)
-    s_perm = torch.cat([
-        train_idxs[train_perm[:n_train//2]],
-        valid_idxs[valid_perm[:n_val//2]],
-        test_idxs[test_perm[:n_test//2]],
-        other_idxs[other_perm[:n_other//2]],
-        ])
-    t_perm = torch.cat([
-        train_idxs[train_perm[n_train//2:]],
-        valid_idxs[valid_perm[n_val//2:]],
-        test_idxs[test_perm[n_test//2:]],
-        other_idxs[other_perm[n_other//2:]],
-        ])
-    s_data = deepcopy(dataset._data.subgraph(s_perm))
-    t_data = deepcopy(dataset._data.subgraph(t_perm))
-    s_dataset = NodeToGraphDataset(
-        s_data,
-        n_hopes = n_hopes
-        )
-    s_n_train = train_perm[:n_train//2].size(0)
-    s_n_valid = valid_perm[:n_val//2].size(0)
-    s_n_test = test_perm[:n_test//2].size(0)
-    s_dataset.initialize(
-        train_idxs = torch.arange(s_n_train),
-        valid_idxs = torch.arange(s_n_train, s_n_train + s_n_valid),
-        test_idxs = torch.arange(s_n_train + s_n_valid, s_n_train + s_n_valid + s_n_test),
-        batch_size = batch_size,
-        normalize_mode = norm_mode,
-        shuffle = False
-        )
-    t_data = add_multivariate_noise(t_data, mean_shift, cov_scale)
-    t_dataset = NodeToGraphDataset(
-        t_data,
-        n_hopes = n_hopes
-        )
-    t_n_train = train_perm[n_train//2:].size(0)
-    t_n_valid = valid_perm[n_val//2:].size(0)
-    t_n_test = test_perm[n_test//2:].size(0)
-    t_dataset.initialize(
-        train_idxs = torch.arange(t_n_train),
-        valid_idxs = torch.arange(t_n_train, t_n_train + t_n_valid),
-        test_idxs = torch.arange(t_n_train + t_n_valid, t_n_train + t_n_valid + t_n_test),
-        batch_size = batch_size,
-        normalize_mode = norm_mode,
-        shuffle = False
-        )
-    
-    return s_dataset, t_dataset
-
-
-def get_graph_dataset(
-    ds_name,
-    cov_scale = 2,
-    mean_shift = 0,
-    store_to_path = "./data",
-    train_per = 0.80,
-    test_per = 0.20,
-    batch_size = 32,
-    norm_mode = "max",
-    node_attributes = True,
-    seed = 2411
-):
-    
-    """ Currently supported datasets: 
-        - ENZYMES
-        - PROTEINS_full
-    """
-    dataset = TUDataset(
-        root = store_to_path,
-        name = ds_name,
-        use_node_attr = node_attributes
-    )
-
-    ntotal_graphs = len(dataset)
-    fix_seed(seed)
-    perm = torch.randperm(ntotal_graphs)
-    s_perm = perm[:int(ntotal_graphs*0.5)]
-    t_perm = perm[int(ntotal_graphs*0.5):]
-    domain_idx_dict = {0:s_perm, 1:t_perm}
-    DomianShift.save_to_file(ds_name, domain_idx_dict)
-    s_ds = dataset.copy(s_perm)
-    t_ds = dataset.copy(t_perm)
-
-    s_dataset = FromPyGGraph(s_ds)
-    s_dataset.initialize(
-        train_test_split = [train_per, test_per],
-        batch_size = batch_size,
-        normalize_mode = norm_mode,
-        shuffle = True,
-        seed = seed
-    )
-    
-    t_ds = add_multivariate_noise(t_ds, mean_shift, cov_scale)
-    t_dataset = FromPyGGraph(t_ds)
-    t_dataset.initialize(
-        train_test_split = [train_per, test_per],
-        batch_size = batch_size,
-        normalize_mode = norm_mode,
-        shuffle = True,
-        seed = seed
-    )
-    return s_dataset, t_dataset
-
-
-def get_gda_dataset(
-        ds_dir,
-        s_ds_name,
-        t_ds_name,
-        train_per = 0.85,
-        test_per = 0.15,
-        batch_size = 32,
-        get_s_dataset = True,
-        get_t_dataset = True,
-        seed = 2411
-        ):
-    if get_s_dataset:
-        s_path = ds_dir + s_ds_name
-        s_dataset = EgoNetworkDataset(s_path)
+        s_dataset = FromPyGGraph(s_ds)
         s_dataset.initialize(
             train_test_split = [train_per, test_per],
             batch_size = batch_size,
+            normalize_mode = norm_mode,
             shuffle = True,
             seed = seed
         )
-    else:
-        s_dataset = "s_dataset"
-    # gc.collect()
-    if get_t_dataset:
-        t_path = ds_dir + t_ds_name
-        t_dataset = EgoNetworkDataset(t_path)
+
+        if shift_type == "feature":
+            if shift_mode == "class_wise":
+                t_ds = graph_ds_add_noise(t_ds, mean_shift, cov_scale)
+            else:
+                t_ds.x[torch.arange(t_ds.x.size(0)), :] = add_multivariate_noise(
+                    t_ds.x[torch.arange(t_ds.x.size(0)), :], mean_shift, cov_scale
+                )
+        elif shift_type == "structural":
+            t_ds = add_structural_noise(t_ds, p_intra, p_inter)
+        else:
+            print("shift type is not implemented yet")
+        t_dataset = FromPyGGraph(t_ds)
         t_dataset.initialize(
             train_test_split = [train_per, test_per],
             batch_size = batch_size,
+            normalize_mode = norm_mode,
             shuffle = True,
             seed = seed
         )
-    else:
-        t_dataset = "t_dataset"
-    return s_dataset, t_dataset
+        return s_dataset, t_dataset
+
+
+    def get_gda_dataset(
+            self,
+            ds_dir,
+            s_ds_name,
+            t_ds_name,
+            train_per = 0.85,
+            test_per = 0.15,
+            batch_size = 32,
+            get_s_dataset = True,
+            get_t_dataset = True,
+            seed = 2411
+            ):
+        if get_s_dataset:
+            s_path = ds_dir + s_ds_name
+            s_dataset = EgoNetworkDataset(s_path)
+            s_dataset.initialize(
+                train_test_split = [train_per, test_per],
+                batch_size = batch_size,
+                shuffle = True,
+                seed = seed
+            )
+        else:
+            s_dataset = "s_dataset"
+        # gc.collect()
+        if get_t_dataset:
+            t_path = ds_dir + t_ds_name
+            t_dataset = EgoNetworkDataset(t_path)
+            t_dataset.initialize(
+                train_test_split = [train_per, test_per],
+                batch_size = batch_size,
+                shuffle = True,
+                seed = seed
+            )
+        else:
+            t_dataset = "t_dataset"
+        return s_dataset, t_dataset

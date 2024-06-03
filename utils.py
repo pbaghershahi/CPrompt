@@ -8,7 +8,7 @@ from torch_geometric.data import Data
 from torch_geometric.loader import DataLoader
 from torcheval.metrics.functional import multiclass_f1_score
 from torchmetrics.classification import BinaryF1Score, MulticlassF1Score
-
+from sklearn.preprocessing import StandardScaler
 
 def cal_avg_num_nodes(dataset):
     total_num_nodes = 0
@@ -66,8 +66,7 @@ def empty_directory(directory):
             os.rmdir(dir_path)
             
 def cal_entropy(input_):
-    entropy = -input_ * torch.log(input_ + 1e-8)
-    entropy = torch.sum(entropy, dim=1)
+    entropy = (-input_ * np.log(input_ + 1e-8)).sum(axis=1)
     return entropy
 
 def entropy_loss(input_):
@@ -225,10 +224,10 @@ def aug_graph(org_graph, aug_prob, aug_type="link", mode="drop"):
             x[perm] = .0
     return org_graph
 
-def test(model, dataset, device, task, mode, pmodel = None, validation = True):
+def test(model, dataset, device, binary_task, mode, pmodel = None, validation = True):
     with torch.no_grad():
         model.eval()
-        f1 = BinaryF1Score() if task == "binary" else MulticlassF1Score(num_classes=dataset.num_gclass, average="macro")
+        f1 = BinaryF1Score() if binary_task else MulticlassF1Score(num_classes=dataset.num_gclass, average="macro")
         test_loss, correct = 0, 0
         labels = []
         preds = []
@@ -279,7 +278,8 @@ def normalize_(input_tensor, dim=0, mode="max", normal_params=None):
         if mode == "max":
             input_tensor.div_(normal_params)
         else:
-            input_tensor.sub_(normal_params[0]).div_(normal_params[1])
+            scalar = normal_params
+            input_tensor = scalar.transform(input_tensor.numpy())
     else:
         if mode == "max":
             max_value = input_tensor.max(dim=0).values
@@ -287,20 +287,10 @@ def normalize_(input_tensor, dim=0, mode="max", normal_params=None):
             input_tensor.div_(max_value)
             normal_params = max_value
         else:
-            mean = input_tensor.mean(dim=dim)
-            std = input_tensor.std(dim=dim)
-            std = torch.max(std, torch.ones_like(std)*1e-12)
-            input_tensor.sub_(mean).div_(std)
-            normal_params = (mean, std)
-    return input_tensor, normal_params
-
-def add_multivariate_noise(input_feats, mean, cov_matrix, inplace=True):
-    n_samples, n_feats = input_feats.numpy().shape
-    noise = np.random.multivariate_normal(mean, cov_matrix, n_samples)
-    noise = torch.as_tensor(noise, dtype=torch.float32)
-    if inplace:
-        return input_feats.add_(noise)
-    return input_feats + noise
+            scalar = StandardScaler()
+            input_tensor = scalar.fit_transform(input_tensor.numpy())
+            normal_params = scalar
+    return torch.as_tensor(input_tensor), normal_params
 
 def _dense_to_sparse(spmat):
     indices = spmat.nonzero(as_tuple=False)

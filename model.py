@@ -72,9 +72,10 @@ class PretrainedModel(nn.Module):
         if not self.with_head:
             x = F.dropout(x, p=self.dropout, training=self.training)
             x = self.gnn_decoder(x, graph_batch.edge_index)
-        scores = global_mean_pool(x, graph_batch.batch)
+            scores = global_mean_pool(x, graph_batch.batch)
         if self.with_head:
-            scores = F.dropout(scores, p=self.dropout, training=self.training)
+            x = global_mean_pool(x, graph_batch.batch)
+            scores = F.dropout(x, p=self.dropout, training=self.training)
             scores = self.linear_decoder(scores)
         return scores, x
     
@@ -84,33 +85,46 @@ class BasePrompt(nn.Module):
                  emb_dim,
                  h_dim,
                  output_dim,
-                 prompt_fn = "trans_x",
-                 token_num = 30) -> None:
+                 prompt_fn = "add_tokens",
+                 token_num = 30,
+                 cross_prune=0.1, 
+                 inner_prune=0.3,
+                 attn_dropout=0.3,
+                 input_dropout=0.3) -> None:
         super(BasePrompt, self).__init__()
-        self.dropout = 0.2
         self.head = nn.Linear(h_dim, output_dim)
+        self.emb_dim = emb_dim
         self.prompt_fn = prompt_fn
-        if prompt_fn == "trans_x":
-            self.linear1 = nn.Linear(emb_dim, h_dim)
-            self.prompt = self.trans_x
-        elif prompt_fn == "gnn":
-            self.gnn1 = GCNConv(emb_dim, h_dim)
-            self.bn1 = nn.BatchNorm1d(h_dim)
-            self.gnn2 = GCNConv(h_dim, h_dim)
-            self.bn2 = nn.BatchNorm1d(h_dim)
-            self.prompt = self.gnn
+        self.token_embeds = torch.nn.Parameter(torch.empty(token_num, emb_dim))
+        torch.nn.init.kaiming_uniform_(self.token_embeds, nonlinearity='leaky_relu', mode='fan_in', a=0.01)
+        if prompt_fn == "gpf_plus":
+            self.attn_dropout = attn_dropout
+            self.prompt = self.gpf_plus
         elif prompt_fn == "add_tokens":
-            cross_prune=0.1
-            inner_prune=0.3
             self.inner_prune = inner_prune
             self.cross_prune = cross_prune
-            self.token_embeds = torch.nn.Parameter(torch.empty(token_num, emb_dim))
-            torch.nn.init.kaiming_uniform_(self.token_embeds, nonlinearity='leaky_relu', mode='fan_in', a=0.01)
             self.pg = self.pg_construct()
             self.prompt = self.add_token
+        elif prompt_fn == "tucker":
+            self.core = nn.Parameter(torch.Tensor(emb_dim, emb_dim, emb_dim))
+            nn.init.xavier_uniform_(self.core, gain=nn.init.calculate_gain('relu'))
+            self.attn_dropout = attn_dropout
+            self.input_dropout = input_dropout
+            self.prompt = self.tucker
+        else:
+            raise Exception("The prompting function is not implemented")
+
+    def get_inner_edges(self, x):
+        token_sim = x @ x.T
+        token_sim.fill_diagonal_(.0)
+        token_sim = torch.sigmoid(token_sim)
+        inner_adj = torch.where(token_sim < self.inner_prune, 0, token_sim)
+        edge_index = inner_adj.nonzero().T.contiguous()
+        return edge_index
 
     def pg_construct(self,):
-        token_sim = torch.mm(self.token_embeds, torch.transpose(self.token_embeds, 0, 1))
+        token_sim = self.token_embeds @ self.token_embeds.T
+        token_sim.fill_diagonal_(.0)
         token_sim = torch.sigmoid(token_sim)
         inner_adj = torch.where(token_sim < self.inner_prune, 0, token_sim)
         edge_index = inner_adj.nonzero().t().contiguous()
@@ -127,43 +141,44 @@ class BasePrompt(nn.Module):
         return adj_list, edge_weights
     
     def add_token(self, graphs):
-        # pg = self.inner_structure_update()
         self.pg.to(graphs[0].x.device)
-        inner_edge_index = self.pg.edge_index
-        token_num = self.pg.x.shape[0]
         for graph in graphs:
-            g_edge_index = graph.edge_index + token_num
-            cross_dot = torch.mm(self.pg.x, torch.transpose(graph.x, 0, 1))
+            cross_dot = self.pg.x @ graph.x.T
             cross_sim = torch.sigmoid(cross_dot)  # 0-1 from prompt to input graph
             cross_adj = torch.where(cross_sim < self.cross_prune, 0, cross_sim)
-            cross_edge_index = cross_adj.nonzero().t().contiguous()
-            cross_edge_index[1] = cross_edge_index[1] + token_num
-            x = torch.cat([self.pg.x, graph.x], dim=0)
+            cross_edge_index = cross_adj.nonzero().T.contiguous()
+            added_tokens = cross_edge_index[0].unique()
+            x = torch.cat([self.pg.x[added_tokens], graph.x], dim=0)
+            g_edge_index = graph.edge_index + added_tokens.size(0)
+            cross_edge_index[0] = (added_tokens[None, :] == cross_edge_index[0][:, None]).nonzero()[:, 1]
+            cross_edge_index[1] = cross_edge_index[1] + added_tokens.size(0)
+            inner_edge_index = self.get_inner_edges(self.pg.x[added_tokens])
             edge_index = torch.cat([inner_edge_index, g_edge_index, cross_edge_index], dim=1)
             graph.edge_index = edge_index
             graph.x = x
         return graphs
 
-    def gnn(self, graphs):
+    def gpf_plus(self, graphs):
         for graph in graphs:
-            emb_out = graph.x.squeeze()
-            emb_out = self.gnn1(emb_out, graph.edge_index)
-            emb_out = F.relu(emb_out)
-            emb_out = F.dropout(emb_out, self.dropout, training=self.training)
-            emb_out = self.gnn2(emb_out, graph.edge_index)
-            emb_out = F.relu(emb_out)
-            emb_out = F.dropout(emb_out, self.dropout, training=self.training)
-            emb_out = self.head(emb_out)
-            graph.x = emb_out
+            attn_scores = F.softmax(graph.x @ self.token_embeds.T, dim = 1)
+            attn_scores = F.dropout(attn_scores, self.attn_dropout, training=self.training)
+            prompt = attn_scores @ self.token_embeds
+            graph.x = graph.x + prompt
         return graphs
-
-    def trans_x(self, graphs):
+    
+    def tucker(self, graphs):
+        core = self.core.view(self.emb_dim, -1)
         for graph in graphs:
-            emb_out = graph.x.squeeze()
-            emb_out = F.relu(self.linear1(emb_out))
-            emb_out = F.dropout(emb_out, self.dropout, training=self.training)
-            emb_out = self.head(emb_out)
-            graph.x = emb_out
+            attn_scores = F.softmax(graph.x @ self.token_embeds.T, dim = 1)
+            attn_scores = F.dropout(attn_scores, self.attn_dropout, training=self.training)
+            xr = attn_scores @ self.token_embeds
+            xr = torch.mm(xr, core)
+            xr = xr.view(-1, self.emb_dim, self.emb_dim)
+            x = graph.x.view(-1, 1, self.emb_dim).contiguous()
+            x = F.dropout(x, self.input_dropout, training=self.training)
+            x = torch.bmm(x, xr)
+            # TODO: We can also addition instead of substitution s.t. graph.x = graph.x + x.view(-1, self.emb_dim) similar to gpf_plus
+            graph.x = x.view(-1, self.emb_dim)
         return graphs
 
     def forward(self, graphs, device = None):
@@ -178,17 +193,13 @@ class BasePrompt(nn.Module):
         return graphs
     
 
-class HeavyPrompt(nn.Module):
-    def __init__(self, token_dim, token_num, cross_prune=0.1, inner_prune=0.3, trans_x=False):
-        super(HeavyPrompt, self).__init__()
+class AllInOneOrginal(nn.Module):
+    def __init__(self, token_dim, token_num, cross_prune=0.1, inner_prune=0.3):
+        super(AllInOneOrginal, self).__init__()
         self.inner_prune = inner_prune
         self.cross_prune = cross_prune
         self.token_embeds = torch.nn.Parameter(torch.empty(token_num, token_dim))
         torch.nn.init.kaiming_uniform_(self.token_embeds, nonlinearity='leaky_relu', mode='fan_in', a=0.01)
-        self.trans_x = trans_x
-        if self.trans_x:
-            self.linear1 = nn.Linear(token_dim, token_dim*2)
-            self.linear2 = nn.Linear(token_dim*2, token_dim)
         self.pg = self.pg_construct()
 
     def pg_construct(self,):
@@ -209,20 +220,14 @@ class HeavyPrompt(nn.Module):
         token_num = self.pg.x.shape[0]
         re_graph_batch = []
         for g in graph_batch:
-            if self.trans_x:
-                x = F.relu(self.linear1(g.x))
-                x = F.dropout(x, 0.2, training=self.training)
-                x = self.linear2(x)
-                edge_index = g.edge_index
-            else:
-                g_edge_index = g.edge_index + token_num
-                cross_dot = torch.mm(self.pg.x, torch.transpose(g.x, 0, 1))
-                cross_sim = torch.sigmoid(cross_dot)  # 0-1 from prompt to input graph
-                cross_adj = torch.where(cross_sim < self.cross_prune, 0, cross_sim)
-                cross_edge_index = cross_adj.nonzero().t().contiguous()
-                cross_edge_index[1] = cross_edge_index[1] + token_num
-                x = torch.cat([self.pg.x, g.x], dim=0)
-                edge_index = torch.cat([inner_edge_index, g_edge_index, cross_edge_index], dim=1)
+            g_edge_index = g.edge_index + token_num
+            cross_dot = torch.mm(self.pg.x, torch.transpose(g.x, 0, 1))
+            cross_sim = torch.sigmoid(cross_dot)
+            cross_adj = torch.where(cross_sim < self.cross_prune, 0, cross_sim)
+            cross_edge_index = cross_adj.nonzero().t().contiguous()
+            cross_edge_index[1] = cross_edge_index[1] + token_num
+            x = torch.cat([self.pg.x, g.x], dim=0)
+            edge_index = torch.cat([inner_edge_index, g_edge_index, cross_edge_index], dim=1)
             y = g.y
             data = Data(x=x, edge_index=edge_index, y=y)
             re_graph_batch.append(data)
@@ -231,50 +236,89 @@ class HeavyPrompt(nn.Module):
             re_graph_batch = Batch.from_data_list(re_graph_batch)
         return re_graph_batch
 
-    """ Peyman: this function consideres the case where we have a task header or decoder.
-    so in this case they don't multiply the representation matrix of the prompt graph
-    by the representation of the nodes from the original graph generated by the gnn."""
-    def Tune(self, train_loader, gnn, answering, lossfn, opi, device):
-        running_loss = 0.
-        for batch_id, train_batch in enumerate(train_loader):
-            # print(train_batch)
-            train_batch = train_batch.to(device)
-            prompted_graph = self.forward(train_batch)
-            # print(prompted_graph)
 
-            graph_emb = gnn(prompted_graph.x, prompted_graph.edge_index, prompted_graph.batch)
-            pre = answering(graph_emb)
-            train_loss = lossfn(pre, train_batch.y)
+class AllInOneModified(nn.Module):
+    def __init__(self, token_dim, token_num, cross_prune=0.1, inner_prune=0.3):
+        super(AllInOneModified, self).__init__()
+        self.inner_prune = inner_prune
+        self.cross_prune = cross_prune
+        self.token_embeds = torch.nn.Parameter(torch.empty(token_num, token_dim))
+        torch.nn.init.kaiming_uniform_(self.token_embeds, nonlinearity='leaky_relu', mode='fan_in', a=0.01)
+        self.pg = self.pg_construct()
 
-            opi.zero_grad()
-            train_loss.backward()
-            opi.step()
-            running_loss += train_loss.item()
+    def pg_construct(self,):
+        token_sim = self.token_embeds @ self.token_embeds.T
+        token_sim.fill_diagonal_(.0)
+        token_sim = torch.sigmoid(token_sim)
+        inner_adj = torch.where(token_sim < self.inner_prune, 0, token_sim)
+        edge_index = inner_adj.nonzero().T.contiguous()
+        pg = Data(x=self.token_embeds, edge_index=edge_index, y=torch.tensor([0]).long())
+        return pg
 
-        return running_loss / len(train_loader)
+    def get_inner_edges(self, x):
+        token_sim = x @ x.T
+        token_sim.fill_diagonal_(.0)
+        token_sim = torch.sigmoid(token_sim)
+        inner_adj = torch.where(token_sim < self.inner_prune, 0, token_sim)
+        edge_index = inner_adj.nonzero().T.contiguous()
+        return edge_index
 
-    """ Peyman: this function consideres the case where we don't have a task header or decoder.
-    so in this case they multiply the representation matrix of the prompt graph
-    by the representation of the nodes from the original graph generated by the gnn.
-    This is like adding a task header or decoder. """
-    def TuneWithoutAnswering(self, train_loader, gnn, answering, lossfn, opi, device):
-        total_loss = 0.0
-        for batch in train_loader:
-            self.optimizer.zero_grad()
-            batch = batch.to(self.device)
-            emb0 = gnn(batch.x, batch.edge_index, batch.batch)
-            pg_batch = self.inner_structure_update()
-            pg_batch = pg_batch.to(self.device)
-            pg_emb = gnn(pg_batch.x, pg_batch.edge_index, pg_batch.batch)
-            # cross link between prompt and input graphs
-            dot = torch.mm(emb0, torch.transpose(pg_emb, 0, 1))
-            sim = torch.softmax(dot, dim=1)
-            loss = lossfn(sim, batch.y)
-            loss.backward()
-            self.optimizer.step()
-            total_loss += loss.item()
-        return total_loss / len(train_loader)
-    
+    def forward(self, graph_batch, device = None):
+        if isinstance(graph_batch, Batch):
+            graph_batch = graph_batch.to_data_list()
+        if device is not None:
+            graph_batch = [graph.to(device) for graph in graph_batch]
+        # self.pg = self.pg_construct()
+        self.pg.to(graph_batch[0].x.device)
+        re_graph_batch = []
+        for g in graph_batch:
+            cross_dot = torch.mm(self.pg.x, torch.transpose(g.x, 0, 1))
+            cross_sim = torch.sigmoid(cross_dot)  # 0-1 from prompt to input graph
+            cross_adj = torch.where(cross_sim < self.cross_prune, 0, cross_sim)
+            cross_edge_index = cross_adj.nonzero().T.contiguous()                
+            added_tokens = cross_edge_index[0].unique()
+            x = torch.cat([self.pg.x[added_tokens], g.x], dim=0)
+            g_edge_index = g.edge_index + added_tokens.size(0)
+            cross_edge_index[0] = (added_tokens[None, :] == cross_edge_index[0][:, None]).nonzero()[:, 1]
+            cross_edge_index[1] = cross_edge_index[1] + added_tokens.size(0)
+            inner_edge_index = self.get_inner_edges(self.pg.x[added_tokens])
+            edge_index = torch.cat([inner_edge_index, g_edge_index, cross_edge_index], dim=1)
+            y = g.y
+            data = Data(x=x, edge_index=edge_index, y=y).to(graph_batch[0].x.device)
+            re_graph_batch.append(data)
+        if not isinstance(re_graph_batch, Batch):
+            assert isinstance(re_graph_batch, List)
+            re_graph_batch = Batch.from_data_list(re_graph_batch)
+        return re_graph_batch
+
+
+class GPFPlus(nn.Module):
+    def __init__(self, token_dim, token_num):
+        super(GPFPlus, self).__init__()
+        self.token_embeds = torch.nn.Parameter(torch.empty(token_num, token_dim))
+        torch.nn.init.kaiming_uniform_(self.token_embeds, nonlinearity='leaky_relu', mode='fan_in', a=0.01)
+        self.dropout = nn.Dropout(0.3)
+
+    def forward(self, graph_batch, device = None):
+        if isinstance(graph_batch, Batch):
+            graph_batch = graph_batch.to_data_list()
+        if device is not None:
+            graph_batch = [graph.to(device) for graph in graph_batch]
+        re_graph_batch = []
+        for g in graph_batch:
+            att_scores = F.softmax(g.x @ self.token_embeds.T, dim = 1)
+            att_scores = self.dropout(att_scores)
+            prompt = att_scores @ self.token_embeds
+            x = g.x + prompt
+            edge_index = g.edge_index
+            y = g.y
+            data = Data(x=x, edge_index=edge_index, y=y).to(graph_batch[0].x.device)
+            re_graph_batch.append(data)
+        if not isinstance(re_graph_batch, Batch):
+            assert isinstance(re_graph_batch, List)
+            re_graph_batch = Batch.from_data_list(re_graph_batch)
+        return re_graph_batch
+
 
 class OrgGCN(nn.Module):
     def __init__(self, nfeat, nhid, nclass, dropout):

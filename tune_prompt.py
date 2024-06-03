@@ -23,48 +23,91 @@ def dir_name_creator(trial,):
 def train_pretrain(config, args, dataset, logger):
 
     # os.environ['CUDA_VISIBLE_DEVICES'] = '0,1,2,3'
-    dataset.init_loaders_(config["gnn_batch_size"])
+    dataset.init_loaders_(config["batch_size"])
     os.environ['CUDA_VISIBLE_DEVICES'] = '0'
-    model_config = dict(
+    pretrained_config = dict(
         gnn_type = args.gnn_type,
         in_channels = dataset.n_feats,
-        hidden_channels = config["gnn_h_dim"],
+        hidden_channels = args.gnn_h_dim,
         out_channels = dataset.num_gclass,
         num_layers = args.gnn_num_layers, 
-        dropout = config["gnn_dropout"],
+        dropout = args.gnn_dropout,
         with_bn = False,
         with_head = True,
     )
     optimizer_config = dict(
-        lr = config["gnn_lr"],
-        scheduler_step_size = config["gnn_step_size"],
-        scheduler_gamma = config["gnn_gamma"]
+        lr = config["lr"],
+        scheduler_step_size = config["step_size"],
+        scheduler_gamma = config["gamma"]
     )
-    training_config = dict(
-        n_epochs = args.gnn_n_epochs
-    )
-    logger.info(f"Setting for pretraining: Model: {model_config} -- Optimizer: {optimizer_config} -- Training: {training_config}")
 
-    if args.pretrain:
-        logger.info(f"Pretraining {args.gnn_type.upper()} on {args.s_dataset} started for {args.gnn_n_epochs} epochs")
-        _, pretrained_path = pretrain_model(
-            dataset,
-            args.gnn_type.upper(),
-            model_config,
-            optimizer_config,
-            training_config,
-            logger,
-            eval_step = args.gnn_eval_step,
-            save_model = args.save_pretrained,
-            pretext_task = "classification",
-            model_dir = "./pretrained",
-            empty_pretrained_dir = args.empty_pretrained_dir,
-            tunning = True
+    logger.info(f"Prompting method: {args.prompt_method} -- Setting: Prompting function: {args.prompt_fn} -- Target Dataset: {t_ds_name}")
+    if args.prompt_method == "all_in_one":
+        prompt_config = dict(
+            token_dim = t_dataset.n_feats,
+            token_num = num_tokens,
+            cross_prune = config["cross_prune"],
+            inner_prune = config["inner_prune"],
+            trans_x = args.trans_x
         )
-        logger.info(f"Pretraining is finished! Saved to: {pretrained_path}")
+        training_config = dict(
+            n_epochs = config["n_epochs"],
+            r_reg = config["r_reg"]
+        )
+        logger.info(f"Prompt tuning setting: Transform X: {args.trans_x} -- Regularization: {config["r_reg"]} -- Epochs: {config["n_epochs"]}")
+    elif args.prompt_method == "contrastive":
+        prompt_config = dict(
+            emb_dim = t_dataset.n_feats,
+            h_dim = args.h_dim,
+            output_dim = t_dataset.n_feats,
+            prompt_fn = args.prompt_fn,
+            token_num = num_tokens
+        )
+        training_config = dict(
+            aug_type = args.aug_type,
+            pos_aug_mode = args.pos_aug_mode,
+            neg_aug_mode = args.neg_aug_mode,
+            p_raug = config["p_raug"],
+            n_raug = config["n_raug"],
+            add_link_loss = args.add_link_loss,
+            n_epochs = config["n_epochs"],
+            r_reg = config["r_reg"]
+        )
+        logger.info(f"Prompt tuning setting: Augmentation type: {args.aug_type} -- Positive aug mode and rate: {args.pos_aug_mode}, {config["p_raug"]} -- Negative aug mode and rate: {args.neg_aug_mode}, {config["n_raug"]} -- Regularization: {config["r_reg"]} -- Epochs: {config["n_epochs"]}")
+    elif args.prompt_method == "pseudo_labeling":
+        prompt_config = dict(
+            emb_dim = t_dataset.n_feats,
+            h_dim = args.h_dim,
+            output_dim = t_dataset.n_feats,
+            prompt_fn = args.prompt_fn,
+            token_num = num_tokens
+        )
+        training_config = dict(
+            aug_type = args.aug_type,
+            pos_aug_mode = args.pos_aug_mode,
+            p_raug = config["p_raug"],
+            n_epochs = config["n_epochs"],
+            r_reg = config["r_reg"]
+        )
+        logger.info(f"Prompt tuning setting: Augmentation type: {args.aug_type} -- Positive aug mode and rate: {args.pos_aug_mode}, {config["p_raug"]} -- Regularization: {config["r_reg"]} -- Epochs: {config["n_epochs"]}")
     else:
-        pretrained_path = args.gnn_path
-        logger.info(f"Using previous pretrained model at {pretrained_path}")
+        raise Exception("The chosen method is not valid!")
+
+    logger.info(f"Setting for prompt tuning: Prompt: {prompt_config} -- Pretrained Model: {pretrained_config} -- Optimizer: {optimizer_config} -- Training: {training_config}")
+    logger.info(f"Prompt tuning started: Num runs: {args.num_runs} -- Eval step: {args.eval_step}")
+    pmodel = prompting(
+        t_dataset,
+        args.prompt_method,
+        prompt_config,
+        pretrained_config,
+        optimizer_config,
+        pretrained_path,
+        training_config,
+        logger,
+        s_dataset,
+        num_runs = args.num_runs,
+        eval_step = args.eval_step
+    )
 
 
 def main(
@@ -73,41 +116,23 @@ def main(
     ):
 
     config = {
-        "gnn_h_dim": tune.choice([64, 128, 256, 512]),
-        "gnn_num_layers": tune.choice([2, 3]),
-        "gnn_dropout": tune.choice([0.2, 0.3, 0.4, 0.5]),
-        "gnn_batch_size": tune.choice([32, 64, 128]),
-        "gnn_lr": tune.choice([1e-2, 1e-3]),
-        "gnn_step_size": tune.choice([50, 100]),
-        "gnn_gamma": tune.choice([0.5, 0.75, 1])
-        # "gnn_h_dim": tune.grid_search([256, 512]),
-        # "gnn_num_layers": tune.grid_search([2, 3]),
-        # "gnn_dropout": tune.grid_search([0.2, 0.3, 0.4]),
-        # "gnn_batch_size": tune.grid_search([64, 128]),
-        # "gnn_lr": tune.grid_search([1e-2, 1e-3]),
-        # "gnn_step_size": tune.grid_search([50, 100]),
-        # "gnn_gamma": tune.grid_search([0.5, 0.9, 1])
+        "gnn_h_dim": tune.choice([512]),
+        'gnn_num_layers': tune.choice([3]),
+        "gnn_dropout": tune.choice([0.4]),
+        'gnn_lr': tune.choice([1e-2, 1e-3, 1e-4]),
+        'gnn_step_size': tune.choice([50, 100, 150]),
+        "gnn_gamma": tune.choice([0.5, 0.75, 0.9, 1])
     }
 
     search_alg = BasicVariantGenerator(
-        points_to_evaluate=[{
-            'gnn_h_dim': 512,
-            'gnn_num_layers': 3,
-            'gnn_dropout': 0.4,
-            'gnn_batch_size': 64,
-            "gnn_lr": 1e-2,
-            "gnn_step_size": 100,
-            "gnn_gamma": 0.9
-        },{
-            'gnn_h_dim': 512,
-            'gnn_num_layers': 3,
-            'gnn_dropout': 0.4,
-            'gnn_batch_size': 64,
-            "gnn_lr": 1e-3,
-            "gnn_step_size": 100,
-            "gnn_gamma": 0.9
-        },],
-        max_concurrent = 2
+        # points_to_evaluate=[{
+        #     'dr_input': 0.2,
+        #     'dr_hid1': 0.2,
+        #     'dr_hid2': 0.2,
+        #     'dr_output': 0.2,
+        #     "dr_decoder": 0.2
+        # }],
+        max_concurrent=3
     )
 
     scheduler = ASHAScheduler(
@@ -132,7 +157,7 @@ def main(
     tuner = tune.Tuner(
         tune.with_resources(
             tune.with_parameters(train_pretrain, args = args, dataset = dataset, logger = logger),
-            resources={"gpu": 0.3, "cpu": 1,}
+            resources={"gpu": 1}
         ),
         tune_config = tune.TuneConfig(
             search_alg = search_alg,
@@ -174,8 +199,8 @@ if __name__ == '__main__':
         # prompt_method = "all_in_one",
         prompt_fn = "add_tokens",
         # dataset = "ego_network",
-        # s_dataset = "ENZYMES",
-        # t_dataset = "ENZYMES",
+        s_dataset = "ENZYMES",
+        t_dataset = "ENZYMES",
         # s_dataset = "PROTEINS_full",
         # t_dataset = "PROTEINS_full",
         # s_dataset = "Cora",
@@ -184,19 +209,19 @@ if __name__ == '__main__':
         # t_dataset = "CiteSeer",
         # s_dataset = "digg",
         # t_dataset = "oag",
-        s_dataset = "Letter-low",
-        t_dataset = "Letter-high",
+        # s_dataset = "Letter-low",
+        # t_dataset = "Letter-high",
         gnn_type = "gcn",
-        gnn_num_layers = 2,
+        gnn_num_layers = 3,
         gnn_path = "./pretrained/GCN_Pretrained_2024-05-17-19-19-13.pth",
         gnn_n_epochs = 300,
         gnn_eval_step = 10,
-        gnn_h_dim = 256,
+        gnn_h_dim = 512,
         gnn_lr = 1e-3,
         gnn_step_size = 100,
         gnn_gamma = 0.5,
         gnn_batch_size = 32,
-        gnn_dropout = 0.2,
+        gnn_dropout = 0.,
         save_pretrained = True,
         batch_size = 32,
         lr = 1e-3,
@@ -222,7 +247,7 @@ if __name__ == '__main__':
         train_per = 0.7,
         test_per = 0.2,
         seed = 4321,
-        config_from_file = "",
+        config_from_file = "./config/enzymes.yaml",
         config_to_file = "./config/enzymes.yaml"
     )
 
@@ -271,7 +296,7 @@ if __name__ == '__main__':
             train_per = args.train_per,
             test_per = args.test_per,
             batch_size = args.batch_size,
-            norm_mode = "normal",
+            norm_mode = "max",
             node_attributes = True,
             seed = args.seed
         )
@@ -300,8 +325,29 @@ if __name__ == '__main__':
             seed = args.seed
         )
 
-
+    if args.pretrain:
+        logger.info(f"Pretraining {args.gnn_type.upper()} on {args.s_dataset} started for {args.gnn_n_epochs} epochs")
+        _, pretrained_path = pretrain_model(
+            dataset,
+            args.gnn_type.upper(),
+            model_config,
+            optimizer_config,
+            training_config,
+            logger,
+            eval_step = args.gnn_eval_step,
+            save_model = args.save_pretrained,
+            pretext_task = "classification",
+            model_dir = "./pretrained",
+            empty_pretrained_dir = args.empty_pretrained_dir,
+            tunning = False
+        )
+        logger.info(f"Pretraining is finished! Saved to: {pretrained_path}")
+        args.gnn_path = pretrained_path
+    else:
+        pretrained_path = args.gnn_path
+        logger.info(f"Using previous pretrained model at {pretrained_path}")
+        
     main(
-        args, s_dataset, logger, 
-        num_samples = 500, max_num_epochs = 20,
+        args, t_dataset, logger, 
+        num_samples = 46, max_num_epochs = 20,
     )
