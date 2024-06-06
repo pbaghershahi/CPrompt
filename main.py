@@ -3,6 +3,7 @@ from utils import *
 from data_utils import *
 import yaml
 import argparse
+import ipdb
 
 
 class PromptTrialResults(object):
@@ -51,8 +52,11 @@ def main(args) -> None:
     arg_seeds = np.random.randint(1000, 5000, (args.total_iters,)) if len(args.seed) == 0 else args.seed
     total_iters = len(arg_seeds)
     t_ds_name = args.t_dataset if args.t_dataset != args.s_dataset else args.s_dataset
+    args.s_split = args.s_split if len(args.s_split) > 0 else args.t_split
+    logger.info(args)
+    logger.info("#"*100)
     logger.info(f"Args seeds: {arg_seeds}")
-    logger.info(f"Source Dataset: {args.s_dataset}, Target Dataset: {t_ds_name}. Training, Test: {args.train_per}, {args.test_per} -- Batch size: {args.batch_size}")
+    logger.info(f"Source Dataset: {args.s_dataset}, Target Dataset: {t_ds_name}. Training, Test: Source: {args.s_split}, Target: {args.t_split} -- Batch size: {args.batch_size}")
 
     results = PromptTrialResults()
     pretrained_paths = args.pretrained_path if len(args.pretrained_path) > 0 else []
@@ -69,12 +73,13 @@ def main(args) -> None:
                 cov_scale = args.noise_cov_scale,
                 mean_shift = args.noise_mean_shift,
                 shift_mode = args.noise_shift_mode,
-                train_per = args.train_per,
-                test_per = args.test_per,
+                s_split = args.s_split,
+                t_split = args.t_split,
                 batch_size = args.batch_size,
                 n_hopes = 2,
                 norm_mode = "normal",
                 node_attributes = True,
+                label_reduction = args.label_reduction,
                 seed = arg_seeds[i]
             )
         elif args.s_dataset in ["ENZYMES", "PROTEINS", "Mutagenicity", "PROTEINS_full", "AIDS"]:
@@ -87,11 +92,12 @@ def main(args) -> None:
                 mean_shift = args.noise_mean_shift,
                 shift_mode = args.noise_shift_mode,
                 store_to_path = "./data/TUDataset",
-                train_per = args.train_per,
-                test_per = args.test_per,
+                s_split = args.s_split,
+                t_split = args.t_split,
                 batch_size = args.batch_size,
                 norm_mode = "normal",
                 node_attributes = True,
+                label_reduction = args.label_reduction,
                 seed = arg_seeds[i]
             )
         elif args.s_dataset in ["Letter-high", "Letter-low", "Letter-med"]:
@@ -99,11 +105,12 @@ def main(args) -> None:
                 args.s_dataset,
                 t_ds_name,
                 store_to_path = "./data/TUDataset",
-                train_per = args.train_per,
-                test_per = args.test_per,
+                s_split = args.s_split,
+                t_split = args.t_split,
                 batch_size = args.batch_size,
                 norm_mode = "normal",
                 node_attributes = True,
+                label_reduction = args.label_reduction,
                 seed = arg_seeds[i]
             )
         elif args.s_dataset in ["digg", "oag", "twitter", "weibo"]:
@@ -111,11 +118,12 @@ def main(args) -> None:
                 ds_dir = "./data/ego_network/",
                 s_ds_name = args.s_dataset,
                 t_ds_name = t_ds_name,
-                train_per = args.train_per,
-                test_per = args.test_per,
+                s_split = args.s_split,
+                t_split = args.t_split,
                 batch_size = args.batch_size,
                 get_s_dataset = True,
                 get_t_dataset = True,
+                label_reduction = args.label_reduction,
                 seed = arg_seeds[i]
             )
 
@@ -133,7 +141,8 @@ def main(args) -> None:
         optimizer_config = dict(
             lr = args.gnn_lr,
             scheduler_step_size = args.gnn_step_size,
-            scheduler_gamma = args.gnn_gamma
+            scheduler_gamma = args.gnn_gamma,
+            weight_decay = args.gnn_weight_decay
         )
         training_config = dict(
             n_epochs = args.gnn_n_epochs
@@ -141,7 +150,6 @@ def main(args) -> None:
         if i % 5 == 0:
             logger.info(f"Setting for pretraining: Model: {model_config} -- Optimizer: {optimizer_config} -- Training: {training_config}")
 
-        # if args.pretrain:
         if len(args.pretrained_path) == 0:
             logger.info(f"Pretraining {model_name} on {args.s_dataset} started for {args.gnn_n_epochs} epochs")
             _, p_path = pretrain_model(
@@ -166,8 +174,10 @@ def main(args) -> None:
         optimizer_config = dict(
             lr = args.lr,
             scheduler_step_size = args.step_size,
-            scheduler_gamma = args.gamma
+            scheduler_gamma = args.gamma,
+            weight_decay = args.weight_decay
         )
+        # ipdb.set_trace()
         if args.prompt_method == "all_in_one_original":
             prompt_config = dict(
                 token_dim = t_dataset.n_feats,
@@ -245,8 +255,6 @@ def main(args) -> None:
             raise Exception("The chosen method is not valid!")
 
         if i % 5 == 0:
-            if args.prompt_fn == "add_tokens":
-                logger.info(f"The number of tokens added: {num_tokens}")
             logger.info(f"Prompting method: {args.prompt_method} -- Setting: Prompting function: {args.prompt_fn} -- Target Dataset: {t_ds_name}")
             logger.info(f"Setting for prompt tuning: Prompt: {prompt_config} -- Pretrained Model: {pretrained_config} -- Optimizer: {optimizer_config} -- Training: {training_config}")
             logger.info(f"Prompt tuning started: Num runs: {args.num_runs} -- Eval step: {args.eval_step}")
@@ -294,13 +302,15 @@ if __name__ == '__main__':
     parser.add_argument("--soft-label", action='store_true')
     parser.add_argument("--add-link-loss", action='store_true')
     parser.add_argument("--empty-pretrained-dir", action='store_true')
-    parser.add_argument("-cluster", "--iterative-clustering", action='store_true')
-    parser.add_argument("-citrs", "--clutering-iters", type=int, default=3, help="Total rounds of updating cluster centers")
-    parser.add_argument("-endiv", "--entropy-div-ratio", type=int, default=3, help="Ratio of deviding samples based on entropy for clustering")
-    parser.add_argument("-w-ent", "--w-entropy-loss", type=float, default=0.0, help="Weight of entropy loss")
-    parser.add_argument("-w-soft", "--w-softmax-loss", type=float, default=0.0, help="Weight of softmax loss")
-    parser.add_argument("-w-domain", "--w-domain-loss", type=float, default=0.0, help="Weight of domain loss")
-    parser.add_argument("-reg", "--r-reg", type=float, default=0.0, help="Rate of regularization")
+    parser.add_argument("--iterative-clustering", action='store_true')
+    parser.add_argument("--clutering-iters", type=int, default=3, help="Total rounds of updating cluster centers")
+    parser.add_argument("--entropy-div-ratio", type=int, default=3, help="Ratio of deviding samples based on entropy for clustering")
+    parser.add_argument("--w-entropy-loss", type=float, default=0.0, help="Weight of entropy loss")
+    parser.add_argument("--w-softmax-loss", type=float, default=0.0, help="Weight of softmax loss")
+    parser.add_argument("--w-domain-loss", type=float, default=0.0, help="Weight of domain loss")
+    parser.add_argument("--r-reg", type=float, default=0.0, help="Rate of regularization")
+    parser.add_argument("--gnn-weight-decay", type=float, default=0.0, help="Rate of regularization")
+    parser.add_argument("--weight-decay", type=float, default=0.0, help="Rate of regularization")
     parser.add_argument("-gnn", "--gnn-type", type=str, default="gcn", help="Type of base GNN: [gcn, gat, gin, sage]")
     parser.add_argument("--gnn-num-layers", type=int, default=3, help="Number of layers of the base GNN")
     parser.add_argument("--pretrained-path", nargs='*', default=[], type=str, help="Paths to the pretrained model")
@@ -331,10 +341,11 @@ if __name__ == '__main__':
     parser.add_argument("--num-runs", type=int, help="Numer of runs per trial")
     parser.add_argument("--p-raug", type=float, help="Positive augmentation rate")
     parser.add_argument("--n-raug", type=float, help="Negative augmentation rate")
-    parser.add_argument("--train-per", type=float, help="Train percentage split")
-    parser.add_argument("--test-per", type=float, help="Test percentage split")
+    parser.add_argument("--s-split", nargs='*', default=[], type=float, help="source dataset split ratio: [train_percentage, test_percentage]")
+    parser.add_argument("--t-split", nargs='*', type=float, help="target dataset split ratio: [train_percentage, test_percentage]")
     parser.add_argument("--seed", nargs='*', default=[], type=int, help="Seed for random")
     parser.add_argument("--config-from-file", type=str, default="", help="Config file to read from")
     parser.add_argument("--config-to-file", type=str, default="", help="Config file to save to")
+    parser.add_argument("--label-reduction", type=float, default=00.0, help="Percentage of label reduction")
     args = parser.parse_args()
     main(args)

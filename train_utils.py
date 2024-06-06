@@ -37,7 +37,7 @@ def pretrain_model(
         obj_fun = nn.CrossEntropyLoss()
     else:
         raise Exception("Pretext task is not implemented yet!")
-    optimizer = Adam(model.parameters(), lr = optimizer_config["lr"])
+    optimizer = Adam(model.parameters(), lr = optimizer_config["lr"], weight_decay = optimizer_config["weight_decay"])
     scheduler = StepLR(optimizer, step_size = optimizer_config["scheduler_step_size"], gamma = optimizer_config["scheduler_gamma"])
     
     test_loss, test_acc, test_f1 = test(model, s_dataset, device, binary_task = binary_task, mode = "pretrain", validation = False)
@@ -117,6 +117,7 @@ def prompting(
         param.requires_grad = False
     main_model.eval()
     results = dict()
+    # ipdb.set_trace()
     if s_dataset is not None:
         test_loss, test_acc, test_f1 = test(main_model, s_dataset, device, binary_task = binary_task, mode = "pretrain", validation = False)
         logger.info(f'Pretrained GNN on Source Dataset -- Test Loss: {test_loss:.3f} -- Test ACC: {test_acc:.3f} -- Test F1-score: {test_f1:.3f}')
@@ -150,7 +151,7 @@ def prompting(
             pmodel = BasePrompt(**prompt_config)
         pmodel.to(device)
     
-        optimizer = Adam(pmodel.parameters(), lr = optimizer_config["lr"])
+        optimizer = Adam(pmodel.parameters(), lr = optimizer_config["lr"], weight_decay = optimizer_config["weight_decay"])
         scheduler = StepLR(optimizer, step_size = optimizer_config["scheduler_step_size"], gamma = optimizer_config["scheduler_gamma"])
         Trainer = PromptTrainer(training_method, training_config)
     

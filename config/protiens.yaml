@@ -36,15 +36,19 @@ pos_aug_mode: mask
 prompt_fn: gpf_plus
 prompt_method: pseudo_labeling
 r_reg: 0.0
-s_dataset: ENZYMES
+s_dataset: PROTIENS
 save_pretrained: true
 seed: 1234
 shift_type: feature
 step_size: 50
-t_dataset: ENZYMES
-test_per: 0.2
+t_dataset: PROTIENS
+test_per: 0.3
 total_iters: 2
-train_per: 0.7
+train_per: 0.5
 w_domain_loss: 0.0
 w_entropy_loss: 1.0
 w_softmax_loss: 1.0
+label_reduction: 0.0
+t_split:
+- 0.65
+- 0.30

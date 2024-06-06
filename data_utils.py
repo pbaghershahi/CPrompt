@@ -564,6 +564,88 @@ def add_structural_noise(data, p_intra = None, p_inter = None):
     return data
 
 
+def structural_noise_to_graph(data, p_intra, p_inter):
+    labels = data.y
+    edges = data.edge_index
+    unique_labels = labels.unique()
+    n_classes = unique_labels.shape[0]
+    if isinstance(p_intra, float) or isinstance(p_inter, float):
+        p_intra = {
+            unique_labels[i]: np.random.choice(np.array([-p_intra, 0.0, p_intra]), replace=True) 
+            for i in range(n_classes)
+        }
+        p_inter = {
+            unique_labels[i]: np.random.choice(np.array([-p_inter, 0.0, p_inter]), replace=True) 
+            for i in range(n_classes)
+        }
+    add_p_intra = {key:value if value > 0.0 else 0.0 for key, value in p_intra.items()}
+    add_p_inter = {key:value if value > 0.0 else 0.0 for key, value in p_inter.items()}
+    drop_p_intra = {key:np.abs(value) if value < 0.0 else 0.0 for key, value in p_intra.items()}
+    
+    for c in unique_labels:
+        inner_mask = (labels == c)
+        same_g_idxs = inner_mask.nonzero().T[0]
+        other_g_idxs = (~inner_mask).nonzero().T[0]
+        x_slices = data.slices["x"]
+        same_x_idxs = torch.cat([torch.arange(x_slices[i], x_slices[i+1]) for i in same_g_idxs])
+        other_x_idxs = torch.cat([torch.arange(x_slices[i], x_slices[i+1]) for i in other_g_idxs])
+        n_same = same_x_idxs.size(0)
+        n_other = other_x_idxs.size(0)
+        
+        for k in same_g_idxs:
+            graph = data[k]
+            g_n_nodes = graph.x.size(0)
+            n_intra_add = int(g_n_nodes * add_p_intra[c.item()])
+            source_idxs = torch.randint(g_n_nodes, (n_intra_add,))
+            target_idxs = torch.randint(n_same, (n_intra_add,))
+            new_x = torch.cat((graph.x, data.x[same_x_idxs[target_idxs]]), dim=0)
+            target_idxs = g_n_nodes + torch.arange(n_intra_add)
+            add_intra_edges = torch.cat((source_idxs[None, :], target_idxs[None, :]), dim=0)
+            new_edges = torch.cat((graph.edge_index, add_intra_edges), dim=1)
+            
+            n_edges = new_edges.size(1)
+            n_intra_drop = int(n_edges * (1-drop_p_intra[c.item()]))
+            perm = torch.randperm(n_edges)[:n_intra_drop]
+            new_edges = new_edges[:, perm]
+        
+            n_inter_add = int(g_n_nodes * add_p_inter[c.item()])
+            source_idxs = torch.randint(g_n_nodes, (n_inter_add,))
+            target_idxs = torch.randint(n_other, (n_inter_add,))
+            new_x = torch.cat((new_x, data.x[other_x_idxs[target_idxs]]), dim=0)
+            target_idxs = g_n_nodes + n_intra_add + torch.arange(n_inter_add)
+            add_inter_edges = torch.cat((source_idxs[None, :], target_idxs[None, :]), dim=0)
+            new_edges = torch.cat((new_edges, add_inter_edges), dim=1)
+        
+            new_edges = torch.cat((new_edges, new_edges[[1, 0], :]), dim=1)
+            new_edges = torch.as_tensor(list(set(map(tuple, new_edges.T.tolist())))).T
+            unique_idxs = new_edges.unique()
+            matched_mask = torch.isin(torch.arange(new_x.size(0)), unique_idxs)
+
+            new_x = new_x[unique_idxs.long()]
+            dec_idxs = torch.cumsum((~matched_mask).int(), dim=0)
+            flat_edges = new_edges.flatten()
+            new_edges = (flat_edges - dec_idxs[flat_edges.long()]).view(2, -1).contiguous()
+
+            data._data_list[k].x = new_x
+            data._data_list[k].edge_index = new_edges
+    
+    counter = 0
+    x_slices = [counter]
+    x = []
+    edge_index = []
+    for graph in data:
+        counter += graph.x.size(0)
+        x_slices.append(counter)
+        x.append(graph.x)
+        edge_index.append(graph.edge_index)
+    x = torch.cat(x, dim=0)
+    edge_index = torch.cat(edge_index, dim=1)
+    data.slices["x"] = x_slices
+    data.x = x
+    data.edge_index = edge_index
+    return data
+
+
 class GDataset(nn.Module):
     def __init__(self,):
         pass
@@ -576,12 +658,12 @@ class GDataset(nn.Module):
         "Implement this is children classes"
         return "x"
 
-    def init_ds_idxs_(self, train_idxs, valid_idxs, test_idxs, train_test_split, shuffle, seed):
+    def init_ds_idxs_(self, train_idxs, valid_idxs, test_idxs, train_test_split, label_reduction, shuffle, seed):
         if (train_idxs is not None) and (valid_idxs is not None) and (test_idxs is not None):
             self.n_train = train_idxs.size(0)
             self.n_valid = valid_idxs.size(0)
             self.n_test = test_idxs.size(0)
-            self.train_idxs = train_idxs
+            self.train_idxs = train_idxs[:int(self.n_train * (1-label_reduction))]
             self.valid_idxs = valid_idxs
             self.test_idxs = test_idxs
         else:
@@ -594,10 +676,11 @@ class GDataset(nn.Module):
                 valid_per = 1 - (train_test_split[0] + train_test_split[1])
             else:
                 valid_per = 0.0
+            self.all_idxs = all_idxs
             self.n_train = int(self.num_gsamples * train_test_split[0])
             self.n_valid = int(self.num_gsamples * valid_per)
             self.n_test = self.num_gsamples - (self.n_train + self.n_valid)
-            self.train_idxs = all_idxs[:self.n_train]
+            self.train_idxs = all_idxs[:int(self.n_train * (1-label_reduction))]
             self.valid_idxs = all_idxs[self.n_train:self.n_train + self.n_valid]
             self.test_idxs = all_idxs[self.n_train + self.n_valid:self.n_train + self.n_valid + self.n_test]
 
@@ -719,7 +802,11 @@ class NodeToGraphDataset(GDataset):
         return self._data.x
 
     def normalize_feats_(self, normalize_mode, **kwargs):
-        self.train_ds._data.x, train_normal_params = normalize_(self.train_ds._data.x, dim=0, mode=normalize_mode)
+        if self.base_ds is not None:
+            _, train_normal_params = normalize_(self.base_ds._data.x, dim=0, mode=normalize_mode)
+            self.train_ds._data.x, _ = normalize_(self.train_ds._data.x, dim=0, mode=normalize_mode, normal_params = train_normal_params)
+        else:
+            self.train_ds._data.x, train_normal_params = normalize_(self.train_ds._data.x, dim=0, mode=normalize_mode)
         if self.n_valid > 0:
             self.valid_ds._data.x, _ = normalize_(
                 self.valid_ds._data.x, dim=0, 
@@ -743,12 +830,19 @@ class NodeToGraphDataset(GDataset):
             loader_collate = graph_collate,
             batch_size = 32, 
             normalize_mode = None,
-            shuffle = False, **kwargs) -> None:
+            shuffle = False, 
+            label_reduction = 0.0, 
+            **kwargs) -> None:
         self.init_ds_idxs_(
             train_idxs = train_idxs, valid_idxs = valid_idxs, test_idxs = test_idxs,
             train_test_split = train_test_split,
+            label_reduction = label_reduction,
             shuffle = shuffle, seed = kwargs["seed"] if "seed" in kwargs else 2411
-        )   
+        )
+        if label_reduction > 0.0:
+            self.base_ds = self._data.copy(self.all_idxs[:self.n_train])
+        else:
+            self.base_ds = None
         self.train_ds = SubgraphSet(
             deepcopy(self._data.subgraph(self.train_idxs)),
             n_hopes = self.n_hopes
@@ -899,10 +993,13 @@ class EgoNetworkDataset(GDataset):
             loader_collate = graph_collate,
             batch_size=32,
             normalize_mode = None,
-            shuffle = False, **kwargs) -> None:
+            shuffle = False, 
+            label_reduction = 0.0,
+            **kwargs) -> None:
         self.init_ds_idxs_(
             train_idxs = train_idxs, valid_idxs = valid_idxs, test_idxs = test_idxs,
             train_test_split = train_test_split,
+            label_reduction = label_reduction,
             shuffle = shuffle, seed = kwargs["seed"] if "seed" in kwargs else 2411
         )
         if normalize_mode is not None:
@@ -939,13 +1036,17 @@ class FromPyGGraph(GDataset):
         return all_graphs
 
     def normalize_feats_(self, normalize_mode, **kwargs):
-        self.train_ds._data.x, train_normal_params = normalize_(self.train_ds._data.x, dim=0, mode=normalize_mode)
+        if self.base_ds is not None:
+            _, train_normal_params = normalize_(self.base_ds._data.x, dim=0, mode=normalize_mode)
+            self.train_ds._data.x, _ = normalize_(self.train_ds._data.x, dim=0, mode=normalize_mode, normal_params = train_normal_params)
+        else:
+            self.train_ds._data.x, train_normal_params = normalize_(self.train_ds._data.x, dim=0, mode=normalize_mode)
         if self.n_valid > 0:
             self.valid_ds._data.x, _ = normalize_(self.valid_ds._data.x, dim=0, mode=normalize_mode, normal_params = train_normal_params)
         if self.n_test > 0:
             self.test_ds._data.x, _ = normalize_(self.test_ds._data.x, dim=0, mode=normalize_mode, normal_params = train_normal_params)
         
-    def init_loaders_(self, batch_size, loader_collate = graph_collate):
+    def init_loaders_(self, batch_size, loader_collate = graph_collate):            
         self.train_loader = DataLoader(self.train_ds, batch_size=batch_size, shuffle=True, collate_fn=loader_collate, num_workers=1)
         self.valid_loader = DataLoader(self.valid_ds, batch_size=batch_size, shuffle=False, collate_fn=loader_collate, num_workers=1)
         self.test_loader = DataLoader(self.test_ds, batch_size=batch_size, shuffle=False, collate_fn=loader_collate, num_workers=1)
@@ -959,12 +1060,19 @@ class FromPyGGraph(GDataset):
             loader_collate = graph_collate,
             batch_size = 32, 
             normalize_mode = None,
-            shuffle = False, **kwargs) -> None:
+            shuffle = False, 
+            label_reduction = 0.0, 
+            **kwargs) -> None:
         self.init_ds_idxs_(
             train_idxs = train_idxs, valid_idxs = valid_idxs, test_idxs = test_idxs,
             train_test_split = train_test_split,
+            label_reduction = label_reduction,
             shuffle = shuffle, seed = kwargs["seed"] if "seed" in kwargs else 2411
         )
+        if label_reduction > 0.0:
+            self.base_ds = self._data.copy(self.all_idxs[:self.n_train])
+        else:
+            self.base_ds = None
         self.train_ds = self._data.copy(self.train_idxs)
         self.valid_ds = self._data.copy(self.valid_idxs) if self.n_valid > 0 else []
         self.test_ds = self._data.copy(self.test_idxs) if self.n_test > 0 else []
@@ -981,17 +1089,18 @@ class GenDataset(object):
         self.logger = logger
 
     def get_graph_da_dataset(
-            self,
-            sds_name,
-            tds_name,
-            store_to_path = "./data",
-            train_per = 0.80,
-            test_per = 0.20,
-            batch_size = 32,
-            norm_mode = "max",
-            node_attributes = True,
-            seed = 2411
-            ):
+        self,
+        sds_name,
+        tds_name,
+        store_to_path = "./data",
+        s_split = [0.8, 0.2],
+        t_split = [0.8, 0.2],
+        batch_size = 32,
+        norm_mode = "max",
+        node_attributes = True,
+        label_reduction = 0.0,
+        seed = 2411
+    ):
 
         s_dataset = TUDataset(
             root = store_to_path,
@@ -1000,10 +1109,11 @@ class GenDataset(object):
         )
         s_dataset = FromPyGGraph(s_dataset)
         s_dataset.initialize(
-            train_test_split = [train_per, test_per],
+            train_test_split = s_split,
             batch_size = batch_size,
             normalize_mode = norm_mode,
             shuffle = True,
+            label_reduction = 0.0,
             seed = seed
         )
 
@@ -1014,27 +1124,29 @@ class GenDataset(object):
         )
         t_dataset = FromPyGGraph(t_dataset)
         t_dataset.initialize(
-            train_test_split = [train_per, test_per],
+            train_test_split = t_split,
             batch_size = batch_size,
             normalize_mode = norm_mode,
             shuffle = True,
+            label_reduction = label_reduction,
             seed = seed
         )
         return s_dataset, t_dataset 
 
 
     def get_node_da_dataset(
-            self,
-            sds_name,
-            tds_name,
-            store_to_path = "./data",
-            train_per = 0.80,
-            test_per = 0.20,
-            batch_size = 32,
-            norm_mode = "max",
-            n_hopes = 2,
-            node_attributes = True
-            ):
+        self,
+        sds_name,
+        tds_name,
+        store_to_path = "./data",
+        s_split = [0.8, 0.2],
+        t_split = [0.8, 0.2],
+        batch_size = 32,
+        norm_mode = "max",
+        n_hopes = 2,
+        label_reduction = 0.0,
+        node_attributes = True
+    ):
 
         s_dataset = Airports(
             root = store_to_path,
@@ -1045,10 +1157,11 @@ class GenDataset(object):
             n_hopes = n_hopes
             )
         s_dataset.initialize(
-            train_test_split = [train_per, test_per],
+            train_test_split = s_split,
             batch_size = batch_size,
             normalize_mode = norm_mode,
-            shuffle = False
+            shuffle = False,
+            label_reduction = 0.0
             )
 
         t_dataset = Airports(
@@ -1060,10 +1173,11 @@ class GenDataset(object):
             n_hopes = n_hopes
             )
         t_dataset.initialize(
-            train_test_split = [train_per, test_per],
+            train_test_split = t_split,
             batch_size = batch_size,
             normalize_mode = norm_mode,
-            shuffle = False
+            shuffle = False,
+            label_reduction = label_reduction
             )
         return s_dataset, t_dataset
 
@@ -1077,12 +1191,13 @@ class GenDataset(object):
         cov_scale = 2,
         mean_shift = 0,
         shift_mode = "class_wise",
-        train_per = 0.85,
-        test_per = 0.15,
+        s_split = [0.8, 0.2],
+        t_split = [0.8, 0.2],
         batch_size = 32,
         n_hopes = 2,
         norm_mode = "max",
         node_attributes = True,
+        label_reduction = 0.0,
         seed = 2411
     ):
 
@@ -1136,7 +1251,8 @@ class GenDataset(object):
             test_idxs = torch.arange(s_n_train + s_n_valid, s_n_train + s_n_valid + s_n_test),
             batch_size = batch_size,
             normalize_mode = norm_mode,
-            shuffle = False
+            shuffle = False,
+            label_reduction = 0.0
             )
         if shift_type == "feature":
             if shift_mode == "class_wise":
@@ -1162,7 +1278,8 @@ class GenDataset(object):
             test_idxs = torch.arange(t_n_train + t_n_valid, t_n_train + t_n_valid + t_n_test),
             batch_size = batch_size,
             normalize_mode = norm_mode,
-            shuffle = False
+            shuffle = False,
+            label_reduction = label_reduction
             )
         
         return s_dataset, t_dataset
@@ -1178,11 +1295,12 @@ class GenDataset(object):
         mean_shift = 0,
         shift_mode = "class_wise",
         store_to_path = "./data",
-        train_per = 0.80,
-        test_per = 0.20,
+        s_split = [0.8, 0.2],
+        t_split = [0.8, 0.2],
         batch_size = 32,
         norm_mode = "max",
         node_attributes = True,
+        label_reduction = 0.0,
         seed = 2411,
     ):
         
@@ -1208,13 +1326,14 @@ class GenDataset(object):
 
         s_dataset = FromPyGGraph(s_ds)
         s_dataset.initialize(
-            train_test_split = [train_per, test_per],
+            train_test_split = s_split,
             batch_size = batch_size,
             normalize_mode = norm_mode,
             shuffle = True,
+            label_reduction = 0.0,
             seed = seed
         )
-
+        # ipdb.set_trace()
         if shift_type == "feature":
             if shift_mode == "class_wise":
                 t_ds = graph_ds_add_noise(t_ds, mean_shift, cov_scale)
@@ -1223,51 +1342,57 @@ class GenDataset(object):
                     t_ds.x[torch.arange(t_ds.x.size(0)), :], mean_shift, cov_scale
                 )
         elif shift_type == "structural":
-            t_ds = add_structural_noise(t_ds, p_intra, p_inter)
+            p_intra = {0:-0.2, 1:-0.2, 2:-0.3, 3:-0.2, 4:-0.5, 5:-0.2}
+            p_inter = {0:0.3, 1:0.6, 2:0.3, 3:0.2, 4:0.3, 5:0.4}
+            t_ds = structural_noise_to_graph(t_ds, p_intra, p_inter)
         else:
             print("shift type is not implemented yet")
         t_dataset = FromPyGGraph(t_ds)
         t_dataset.initialize(
-            train_test_split = [train_per, test_per],
+            train_test_split = t_split,
             batch_size = batch_size,
             normalize_mode = norm_mode,
             shuffle = True,
+            label_reduction = label_reduction,
             seed = seed
         )
         return s_dataset, t_dataset
 
 
     def get_gda_dataset(
-            self,
-            ds_dir,
-            s_ds_name,
-            t_ds_name,
-            train_per = 0.85,
-            test_per = 0.15,
-            batch_size = 32,
-            get_s_dataset = True,
-            get_t_dataset = True,
-            seed = 2411
-            ):
+        self,
+        ds_dir,
+        s_ds_name,
+        t_ds_name,
+        s_split = [0.8, 0.2],
+        t_split = [0.8, 0.2],
+        batch_size = 32,
+        get_s_dataset = True,
+        get_t_dataset = True,
+        label_reduction = 0.0,
+        seed = 2411
+    ):
         if get_s_dataset:
             s_path = ds_dir + s_ds_name
             s_dataset = EgoNetworkDataset(s_path)
             s_dataset.initialize(
-                train_test_split = [train_per, test_per],
+                train_test_split = s_split,
                 batch_size = batch_size,
                 shuffle = True,
+                label_reduction = 0.0,
                 seed = seed
             )
         else:
             s_dataset = "s_dataset"
-        # gc.collect()
+
         if get_t_dataset:
             t_path = ds_dir + t_ds_name
             t_dataset = EgoNetworkDataset(t_path)
             t_dataset.initialize(
-                train_test_split = [train_per, test_per],
+                train_test_split = t_split,
                 batch_size = batch_size,
                 shuffle = True,
+                label_reduction = label_reduction,
                 seed = seed
             )
         else:

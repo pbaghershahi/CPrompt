@@ -36,12 +36,12 @@ pos_aug_mode: mask
 prompt_fn: gpf_plus
 prompt_method: pseudo_labeling
 r_reg: 0.0
-s_dataset: ENZYMES
+s_dataset: Mutagenicity
 save_pretrained: true
 seed: 1234
 shift_type: feature
 step_size: 50
-t_dataset: ENZYMES
+t_dataset: Mutagenicity
 total_iters: 2
 w_domain_loss: 0.0
 w_entropy_loss: 1.0

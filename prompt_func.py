@@ -129,20 +129,30 @@ class PromptTrainer():
                initc = initc / (1e-8 + ps_probs.sum(axis=0)[:,None])
                dd = cdist(ps_embds, initc, 'cosine')
                pred_label = dd.argmin(axis=1)
+        # soft_probs = F.softmax(torch.as_tensor(1 - dd, device = device), dim=1)
+        # pos_entropy = cal_entropy(soft_probs.detach().cpu().numpy())
+        # argmin_entropy = pos_entropy.argsort()
+        # pred_label = pred_label[argmin_entropy[:len(batch)//2]]
+        # prompt_out = prompt_out[argmin_entropy[:len(batch)//2]]
         if self.training_config["soft_label"]:
             ps_probs = F.softmax(torch.as_tensor(1 - dd, device = device), dim=1)
         else:
             ps_probs = torch.as_tensor(np.eye(prompt_out.size(1))[pred_label, :], device = device)
+        # ent_weights = cal_entropy(soft_probs.detach().cpu().numpy())
+        # ent_weights = ent_weights/ent_weights.max(axis=0)
+        # ent_weights = torch.as_tensor(ent_weights).to(prompt_out.device)[:, None]
+        # ps_probs *= ent_weights
         if self.training_config["binary_task"]:
             loss = F.binary_cross_entropy_with_logits(prompt_out, ps_probs)
         else:
             loss = F.cross_entropy(prompt_out, ps_probs)
         softmax_out = F.softmax(prompt_out, dim=1)
         if self.training_config["w_entropy_loss"] > 0.0:
-            loss += self.training_config["w_entropy_loss"] * entropy_loss(softmax_out).mean()
-        if self.training_config["w_softmax_loss"] > 0.0:
-            b_softmax = softmax_out.mean(dim=0)
-            loss += self.training_config["w_softmax_loss"] * torch.sum(b_softmax * torch.log(b_softmax + 1e-5))
+            ent_loss = entropy_loss(softmax_out).mean()
+            if self.training_config["w_softmax_loss"] > 0.0:
+                b_softmax = softmax_out.mean(dim=0)
+                ent_loss -= self.training_config["w_softmax_loss"] * torch.sum(-b_softmax * torch.log(b_softmax + 1e-5))
+            loss += ent_loss * self.training_config["w_entropy_loss"]
         if self.training_config["w_domain_loss"] > 0.0:
             loss += self.training_config["w_domain_loss"] * self.domain_loss(kwargs["discriminator"], pos_batch, prompt_batch, device)
         if self.training_config["r_reg"] > 0.0 and prompt_model.prompt_fn == "add_tokens":
