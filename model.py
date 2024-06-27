@@ -10,6 +10,29 @@ from utils import *
 import ipdb
 
 
+class Discriminator(nn.Module):
+    def __init__(
+            self,
+            in_channels, 
+            hidden_channels, 
+            out_channels, 
+            num_layers = 2,
+            dropout = 0.0,
+            *args, 
+            **kwargs
+        ) -> None:
+        super(Discriminator, self).__init__(*args, **kwargs)
+        self.linear1 = nn.Linear(in_channels, hidden_channels)
+        self.linear2 = nn.Linear(hidden_channels, out_channels)
+        self.dropout = dropout
+
+    def forward(self, graph_embed):
+        x = F.relu(self.linear1(graph_embed))
+        x = F.dropout(x, p=self.dropout, training=self.training)
+        out = self.linear2(x)
+        return out
+
+
 class PretrainedModel(nn.Module):
     def __init__(
             self, gnn_type,

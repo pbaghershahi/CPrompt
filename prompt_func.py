@@ -18,6 +18,8 @@ class PromptTrainer():
             self.train_func = self.contrastive
         elif training_method == "pseudo_labeling":
             self.train_func = self.pseudo_labeling
+        elif training_method == "fix_match":
+            self.train_func = self.fix_match
 
     def contrastive(self, pretrained_model, prompt_model, batch, device, **kwargs):
         labels = batch.y.to(device)
@@ -82,14 +84,14 @@ class PromptTrainer():
             decoder = True,
             device = device
             )
-        pos_out, pos_embeds = pretrained_model(
+        pos_out, pos_embed = pretrained_model(
             pos_batch,
             decoder = True,
             device = device
             )
         clutering_iters = self.training_config["clutering_iters"]
         if self.training_config["iterative_clustering"]:
-            pos_embeds = pos_embeds.detach().cpu().numpy()
+            pos_embeds = pos_embed.detach().cpu().numpy()
             pos_probs = pos_out.detach().cpu().numpy()
             # ipdb.set_trace()
             ent_div_ratio = self.training_config["entropy_div_ratio"]
@@ -114,7 +116,7 @@ class PromptTrainer():
                pred_label = dd.argmin(axis=1)
         else:
             pos_probs = F.softmax(pos_out, dim=1)
-            pos_embeds = (pos_embeds.T / pos_embeds.norm(p=2, dim=1)).T
+            pos_embeds = (pos_embed.T / pos_embed.norm(p=2, dim=1)).T
             ps_embds = pos_embeds.detach().cpu().numpy()
             ps_probs = pos_probs.detach().cpu().numpy()
             initc = ps_probs.T @ ps_embds
@@ -154,9 +156,66 @@ class PromptTrainer():
                 ent_loss -= self.training_config["w_softmax_loss"] * torch.sum(-b_softmax * torch.log(b_softmax + 1e-5))
             loss += ent_loss * self.training_config["w_entropy_loss"]
         if self.training_config["w_domain_loss"] > 0.0:
-            loss += self.training_config["w_domain_loss"] * self.domain_loss(kwargs["discriminator"], pos_batch, prompt_batch, device)
+            loss += self.training_config["w_domain_loss"] * \
+            self.domain_loss(kwargs["discriminator"], kwargs["optimizer_d"], pos_embed, prompt_embed, device)
         if self.training_config["r_reg"] > 0.0 and prompt_model.prompt_fn == "add_tokens":
             loss += self.training_config["r_reg"] * prompt_model.token_embeds.pow(2).mean()
+        return loss
+
+    def fix_match(self, pretrained_model, prompt_model, batch, device, **kwargs):
+        batch = batch.to_data_list()
+        pos_batch = [
+            aug_graph(
+                Data(x = g.x, edge_index = g.edge_index, y = g.y), 
+                aug_prob = self.training_config["light_aug_prob"], 
+                aug_type = self.training_config["aug_type"], 
+                mode = self.training_config["light_aug_mode"]
+            ).to(device)
+            for g in batch
+        ]
+        prompt_batch = [
+            aug_graph(
+                Data(x = g.x, edge_index = g.edge_index, y = g.y), 
+                aug_prob = self.training_config["p_raug"], 
+                aug_type = self.training_config["aug_type"], 
+                mode = self.training_config["pos_aug_mode"]
+            ).to(device)
+            for g in batch
+        ]
+        prompt_batch = prompt_model(prompt_batch)
+        prompt_out, prompt_embed = pretrained_model(
+            prompt_batch,
+            decoder = True,
+            device = device
+            )
+        pos_out, pos_embed = pretrained_model(
+            pos_batch,
+            decoder = True,
+            device = device
+            )
+        pos_out = F.softmax(pos_out, dim=1)
+        thresh_mask = (pos_out.max(dim=1).values > self.training_config["cut_off"]).nonzero().T[0]
+        pos_out = pos_out[thresh_mask, :]
+        prompt_out = prompt_out[thresh_mask, :]
+        pseudo_labels = torch.zeros_like(pos_out).scatter_(1, pos_out.argmax(dim=1)[:, None], 1.)
+        ce_loss, ent_loss, softmax_loss, domain_loss = 0.0, 0.0, 0.0, 0.0
+        if self.training_config["binary_task"]:
+            ce_loss = F.binary_cross_entropy_with_logits(prompt_out, pseudo_labels)
+        else:
+            ce_loss = F.cross_entropy(prompt_out, pseudo_labels)
+        softmax_out = F.softmax(prompt_out, dim=1)
+        if self.training_config["w_entropy_loss"] > 0.0:
+            ent_loss = entropy_loss(softmax_out).mean()
+        if self.training_config["w_softmax_loss"] > 0.0:
+            b_softmax = softmax_out.mean(dim=0)
+            softmax_loss = -torch.sum(-b_softmax * torch.log(b_softmax + 1e-5))
+        if self.training_config["w_domain_loss"] > 0.0:
+            domain_loss = self.domain_loss(kwargs["discriminator"], kwargs["optimizer_d"], pos_embed, prompt_embed, device)
+        # if self.training_config["r_reg"] > 0.0 and prompt_model.prompt_fn == "add_tokens":
+        #     loss += self.training_config["r_reg"] * prompt_model.token_embeds.pow(2).mean()
+        # print(f"CE Loss: {ce_loss.item()} -- Entropy Loss: {ent_loss} -- Softmax Loss: {softmax_loss.item()} -- Domain Loss: {domain_loss.item()}")
+        loss = ce_loss + ent_loss * self.training_config["w_entropy_loss"] + \
+        softmax_loss * self.training_config["w_softmax_loss"] + domain_loss * self.training_config["w_domain_loss"]
         return loss
 
     def supervised(self, pretrained_model, prompt_model, batch, device, **kwargs):
@@ -171,48 +230,23 @@ class PromptTrainer():
             loss += self.training_config["r_reg"] * prompt_model.token_embeds.pow(2).mean()
         return loss
 
-    def domain_loss(self, discriminator, pos_batch, prompt_batch, device):
-        if isinstance(pos_batch, Batch):
-            pos_batch = Batch.to_data_list(pos_batch)
-        if isinstance(prompt_batch, Batch):
-            prompt_batch = Batch.to_data_list(prompt_batch)
-        batch = Batch.from_data_list(pos_batch + prompt_batch)
-        # ipdb.set_trace()
-        loss = .0
-        if self.batch_counter % (self.total_batches -2) == 0:
-            cat_labels = torch.cat((
-                torch.ones((len(pos_batch),), device = device), 
-                torch.zeros((len(prompt_batch),), device = device)
-            ))
-            labels = torch.zeros((cat_labels.size(0), 2), dtype=torch.float, device = device)
-            labels.scatter_(1, cat_labels[:, None].long(), 1.)
-            out, _ = discriminator(
-                batch.detach(),
-                decoder = True,
-                device = device
-            )
-            # acc = (F.softmax(out, dim=1).argmax(dim=1) == cat_labels).sum() / cat_labels.size(0)
-            # print("First ACC: ", acc)
-            loss = F.binary_cross_entropy_with_logits(out, labels)
-        for param in discriminator.parameters():
-            param.requires_grad = False
-        discriminator.eval()
-        cat_labels = torch.ones((len(prompt_batch),), device = device)
-        promtp_out, _ = discriminator(
-            Batch.from_data_list(prompt_batch),
-            decoder = True,
-            device = device
-        )
-        # acc = (F.softmax(promtp_out, dim=1).argmax(dim=1) == cat_labels).sum() / cat_labels.size(0)
-        # print("Second ACC: ", acc)
-        # loss += F.cross_entropy(promtp_out, cat_labels.long())
-        labels = torch.zeros((cat_labels.size(0), 2), dtype=torch.float, device = device)
-        labels.scatter_(1, cat_labels[:, None].long(), 1.)
-        loss += F.binary_cross_entropy_with_logits(promtp_out, labels)
-        for param in discriminator.parameters():
-            param.requires_grad = True
-        discriminator.train()
-        return loss
+    def domain_loss(self, discriminator, optimizer_d, pos_embed, prompt_embed, device):
+
+        real_labels = torch.ones((prompt_embed.size(0), 1), device = device)
+        fake_labels = torch.zeros((prompt_embed.size(0), 1), device = device)
+
+        optimizer_d.zero_grad()
+        real_out = discriminator(pos_embed)
+        fake_out = discriminator(prompt_embed.detach())
+        real_loss = F.binary_cross_entropy_with_logits(real_out, real_labels)
+        fake_loss = F.binary_cross_entropy_with_logits(fake_out, fake_labels)
+        disc_loss = (real_loss + fake_loss) / 2
+        disc_loss.backward()
+        optimizer_d.step()
+
+        prompt_out = discriminator(prompt_embed)
+        prompt_loss = F.binary_cross_entropy_with_logits(prompt_out, real_labels)
+        return prompt_loss
         
     def train(self, t_dataset, pretrained_model, prompt_model, optimizer, device, logger, **kwargs) -> None:
         for i, batch in enumerate(t_dataset.train_loader):

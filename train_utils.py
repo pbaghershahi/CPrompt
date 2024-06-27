@@ -88,6 +88,7 @@ def pretrain_model(
                 'optimizer_state_dict': optimizer.state_dict(),
             }, model_path
         )
+        logger.info(f"Model saved to: {model_path}")
     else:
         model_path = "Won't be stored"
     return model, model_path
@@ -111,7 +112,14 @@ def prompting(
     training_method = "supervised" if prompt_method in ["all_in_one_original", "all_in_one_modified", "gpf_plus"] else prompt_method
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     main_model = PretrainedModel(**pretrained_config)
+    discr_config = {
+        "in_channels":pretrained_config["hidden_channels"], 
+        "hidden_channels":pretrained_config["hidden_channels"], 
+        "out_channels":1, "num_layers":2, "dropout":pretrained_config["dropout"]
+    }
+    discriminator = Discriminator(**discr_config)
     main_model.to(device)
+    discriminator.to(device)
     load_model(main_model, read_checkpoint=True, pretrained_path=pretrained_path)
     for param in main_model.parameters():
         param.requires_grad = False
@@ -149,9 +157,13 @@ def prompting(
             pmodel = BasePrompt(**prompt_config)
         elif prompt_method == "pseudo_labeling":
             pmodel = BasePrompt(**prompt_config)
+        elif prompt_method == "fix_match":
+            pmodel = BasePrompt(**prompt_config)
         pmodel.to(device)
-    
+
+        
         optimizer = Adam(pmodel.parameters(), lr = optimizer_config["lr"], weight_decay = optimizer_config["weight_decay"])
+        optimizer_d = Adam(discriminator.parameters(), lr = optimizer_config["lr"], weight_decay = optimizer_config["weight_decay"])
         scheduler = StepLR(optimizer, step_size = optimizer_config["scheduler_step_size"], gamma = optimizer_config["scheduler_gamma"])
         Trainer = PromptTrainer(training_method, training_config)
     
@@ -161,7 +173,10 @@ def prompting(
         for epoch in range(n_epochs):
             pmodel.train()
             main_model.eval()
-            loss = Trainer.train(t_dataset, main_model, pmodel, optimizer, device, logger)
+            loss = Trainer.train(
+                t_dataset, main_model, pmodel, optimizer, device, logger, 
+                discriminator = discriminator, optimizer_d = optimizer_d
+            )
             scheduler.step()
             optimizer.zero_grad()
             

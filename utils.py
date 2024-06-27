@@ -407,3 +407,35 @@ original graphs with other graphs of a batch.
 #     loss_partial = neg_scores - pos_scores
 #     loss = torch.mean(loss_partial)
 #     return loss
+
+def compute_averages(ratios, results_str):
+    prompt_f1 = np.zeros((2, ))
+    prompt_acc = np.zeros((2, ))
+    target_f1 = np.zeros((2, ))
+    target_acc = np.zeros((2, ))
+    splited_input = [s.split(" ") for s in results_str.split(" -- ")]
+    ratios = np.array(ratios)
+    for i in range(len(splited_input)):
+        if splited_input[i][0] == "Target":
+            if splited_input[i][1] == "Test":
+                if splited_input[i][2] == "F1:":
+                    target_f1[0] = float(splited_input[i][3])*ratios[0]
+                else:
+                    target_acc[0] = float(splited_input[i][3])*ratios[0]
+            else:
+                if splited_input[i][2] == "F1:":
+                    target_f1[1] = float(splited_input[i][3])*ratios[1]
+                else:
+                    target_acc[1] = float(splited_input[i][3])*ratios[1]
+        else:
+            if splited_input[i][1] == "Test":
+                if splited_input[i][2] == "F1:":
+                    prompt_f1[0] = float(splited_input[i][3])*ratios[0]
+                else:
+                    prompt_acc[0] = float(splited_input[i][3])*ratios[0]
+            else:
+                if splited_input[i][2] == "F1:":
+                    prompt_f1[1] = float(splited_input[i][3])*ratios[1]
+                else:
+                    prompt_acc[1] = float(splited_input[i][3])*ratios[1]
+    print(f"Target Acc: {target_acc.sum()/ratios.sum():.3f} -- Target F1: {target_f1.sum()/ratios.sum():.3f} -- Prompt Acc: {prompt_acc.sum()/ratios.sum():.3f} -- Prompt F1: {prompt_f1.sum()/ratios.sum():.3f}")

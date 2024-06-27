@@ -26,7 +26,7 @@ n_epochs: 50
 n_raug: 0.15
 neg_aug_mode: arbitrary
 noise_cov_scale: 1.0
-noise_mean_shift: 1.0
+noise_mean_shift: 5.0
 noise_shift_mode: class_wise
 num_runs: 2
 p_raug: 0.15
@@ -36,14 +36,16 @@ pos_aug_mode: mask
 prompt_fn: gpf_plus
 prompt_method: pseudo_labeling
 r_reg: 0.0
-s_dataset: Mutagenicity
+s_dataset: PROTEINS
 save_pretrained: true
 seed: 1234
 shift_type: feature
 step_size: 50
 src_ratio: 0.5
-t_dataset: Mutagenicity
+t_dataset: PROTEINS
+test_per: 0.3
 total_iters: 2
+train_per: 0.5
 w_domain_loss: 0.0
 w_entropy_loss: 0.0
 w_softmax_loss: 0.0

@@ -6,7 +6,7 @@ from model import *
 import pandas as pd
 from torch_geometric.loader import DataLoader as PyG_Dataloader
 from torch_geometric.data import Data, Batch, Dataset as PyG_Dataset
-from torch_geometric.utils import k_hop_subgraph, subgraph, dense_to_sparse
+from torch_geometric.utils import k_hop_subgraph, subgraph, dense_to_sparse, homophily, degree, to_networkx, get_ppr, is_undirected
 from torch_geometric.loader import NeighborLoader
 from torch.utils.data import Dataset, DataLoader, Sampler
 from sklearn.datasets import make_spd_matrix
@@ -14,6 +14,7 @@ from sklearn.mixture import GaussianMixture
 from collections import OrderedDict
 from copy import deepcopy
 from sklearn.utils import shuffle as sk_shuffl
+from networkx import pagerank
 import ipdb
 import gc
 
@@ -722,58 +723,182 @@ class SubsetRandomSampler(SubsetSampler):
         return (self.indices[i] for i in torch.randperm(len(self.indices)))
 
 
-class SubgraphSet(Dataset):
-    def __init__(self,
-                 graph_data,
-                 n_hopes,
-                 **kwargs) -> None:
-        super(SubgraphSet, self).__init__()
-        self._data = graph_data
-        self.all_nids, self.all_edges = self.init_induced_graphs(smallest_size=10, largest_size=30)
+def node_homophily_splits(all_nids, all_edges, labels, src_ratio, select_mode="soft"):
+    n_graphs = len(all_nids)
+    homophily_ratios = []
+    mask = torch.ones((n_graphs,), dtype=bool)
+    aux = torch.ones((n_graphs,), dtype=int) * -1
+    for i, nids in enumerate(all_nids):
+        if mask[i]:
+            
+            for j in nids:
+                adj_nids = all_nids[j]
+                min_size, max_size = torch.tensor([nids.size(0), adj_nids.size(0)]).sort().values
+                if j > i and (min_size/max_size) > 0.8:
+                    same = torch.isin(nids, adj_nids).sum()
+                    same_ratior = same/nids.size(0)
+                    if same_ratior > 0.8:
+                        mask[j] = False
+                        aux[j] = i
+    
+            edges = all_edges[i]
+            s_ids = nids[all_edges[i][0, :]]
+            t_ids = nids[all_edges[i][1, :]]
+            s_label = labels[s_ids]
+            t_label = labels[t_ids]
+            same_edge = (s_label == t_label).sum()
+            homophily_ratios.append(same_edge / max(1, edges.size(1)))
+    
+    remained_idxs = mask.nonzero().T[0]
+    n_samples = remained_idxs.size(0)
+    homophily_ratios = torch.as_tensor(homophily_ratios)
+    num_zeroh = (homophily_ratios == 0.0).sum()
+    num_nonzeroh = homophily_ratios.size(0) - num_zeroh
+    min_h = torch.as_tensor(homophily_ratios).unique()[1]
+    homophily_ratios += min_h * torch.ceil(num_zeroh / num_nonzeroh)
+    if select_mode == "soft":
+        selec_probs = homophily_ratios / homophily_ratios.sum()
+        rand_idxs = torch.as_tensor(np.random.choice(n_samples, int(n_samples * src_ratio), replace=False, p=selec_probs.numpy()))
+    else:
+        _, sorted_idxs = homophily_ratios.sort(descending=False)
+        rand_idxs = sorted_idxs[int(n_samples * src_ratio):]
+    rand_idxs = rand_idxs.sort().values
+    src_mask = torch.zeros((n_samples,), dtype=bool)
+    src_mask[rand_idxs] = True
+    src_ego_idxs = remained_idxs[src_mask]
+    tgt_ego_idxs = remained_idxs[~src_mask]
+    return src_ego_idxs, tgt_ego_idxs
 
-    def init_induced_graphs(self, smallest_size=10, largest_size=30):
-        induced_nodes = []
-        induced_edge_idxs = []
-        for index in range(self._data.x.size(0)):
-            current_label = self._data.y[index].item()
 
-            current_hop = 2
-            subset, _, _, _ = k_hop_subgraph(
-                node_idx=index, num_hops=current_hop, edge_index = self._data.edge_index,
-                num_nodes = self._data.x.size(0), relabel_nodes = True
-                )
+def node_ppr_splits(data_graph, src_ratio, select_mode="soft", drop_unconnected = True):
+    n_samples = data_graph.x.size(0)
+    ppr_dict = pagerank(to_networkx(data_graph))
+    pprs = torch.zeros((n_samples,))
+    for key, value in ppr_dict.items():
+        pprs[key] = value
+    if select_mode == "soft":
+        selec_probs = pprs / pprs.sum()
+        src_idxs = torch.as_tensor(np.random.choice(n_samples, int(n_samples * src_ratio), replace=False, p=selec_probs.numpy()))
+    else:
+        _, sorted_idxs = pprs.sort(descending=False)
+        src_idxs = sorted_idxs[int(n_samples * src_ratio):]
 
-            while len(subset) < smallest_size and current_hop < 5:
+    if drop_unconnected:
+        assert is_undirected(data_graph.edge_index)
+        sub_edges, _ = subgraph(src_idxs, data_graph.edge_index)
+        assert is_undirected(sub_edges)
+        connected_idxs = sub_edges[0, :].unique()
+        src_idxs = src_idxs[torch.isin(src_idxs, connected_idxs)]
+
+    src_idxs = src_idxs.sort().values
+    src_mask = torch.zeros((n_samples,), dtype=bool)
+    src_mask[src_idxs] = True
+    tgt_idxs = (~src_mask).nonzero().T[0]
+
+    return src_idxs, tgt_idxs
+
+
+def merge_induced_graphs(ref_idxs, all_nids, nids, edges):
+    mapping = dict()
+    new_nids = dict()
+    new_edges = dict()
+    last_id = torch.cat(list(nids.values())).max()
+    for i in range(len(nids)):
+        temp_nids = all_nids[ref_idxs[i].item()]
+        unmatched_idxs = temp_nids[~torch.isin(temp_nids, ref_idxs[nids[i]])]
+        n_unmatched = unmatched_idxs.size(0)
+        mapped_unmachted = torch.ones_like(unmatched_idxs) * -1
+        ego_arg = (nids[i] == i).nonzero().T[0]
+        for j, k in enumerate(unmatched_idxs.tolist()):
+            if k not in mapping:
+                mapping[k] = last_id
+                last_id = last_id + 1
+            mapped_unmachted[j] = mapping[k]
+        new_edge_tgts = torch.arange(n_unmatched) + nids[i].size(0)
+        temp_edges = torch.cat((ego_arg.tile(1, n_unmatched), new_edge_tgts[None, :]), dim=0)
+        new_edges[i] = torch.cat((edges[i], temp_edges, temp_edges[[1, 0], :]), dim=1)
+        new_nids[i] = torch.cat((nids[i], mapped_unmachted))
+        assert new_edges[i].max()+1 == new_nids[i].size(0)
+        assert is_undirected(edges[i])
+    return new_nids, new_edges, mapping
+
+
+def get_induced_graphs(dataset, n_hops, smallest_size=None, largest_size=None, max_hop=5):
+    induced_nodes = dict()
+    induced_edge_idxs = dict()
+    for index in range(dataset.x.size(0)):
+
+        current_hop = n_hops
+        subset, edges, _, _ = k_hop_subgraph(
+            node_idx=index, num_hops=current_hop, edge_index = dataset.edge_index,
+            num_nodes = dataset.x.size(0), relabel_nodes = True
+            )
+
+        if smallest_size:
+            while len(subset) < smallest_size and current_hop < max_hop:
                 current_hop += 1
                 subset, _, _, _ = k_hop_subgraph(
                     node_idx = index, num_hops=current_hop,
-                    edge_index = self._data.edge_index,
-                    num_nodes = self._data.x.size(0), relabel_nodes = True
+                    edge_index = dataset.edge_index,
+                    num_nodes = dataset.x.size(0), relabel_nodes = True
                     )
-
+    
             if len(subset) < smallest_size:
                 need_node_num = smallest_size - len(subset)
-                pos_nodes = torch.argwhere(self._data.y == int(current_label))
+                pos_nodes = torch.argwhere(dataset.y == int(current_label))
                 candidate_nodes = torch.from_numpy(np.setdiff1d(pos_nodes.numpy(), subset.numpy()))
                 candidate_nodes = candidate_nodes[torch.randperm(candidate_nodes.size(0))][:need_node_num]
                 subset = torch.cat([torch.flatten(subset), torch.flatten(candidate_nodes)])
 
+        if largest_size:
             if len(subset) > largest_size:
                 subset = subset[torch.randperm(subset.shape[0])][:largest_size - 1]
                 subset = torch.unique(torch.cat([torch.LongTensor([index]), torch.flatten(subset)]))
 
-            sub_edge_index, _ = subgraph(subset, self._data.edge_index, num_nodes=self._data.x.size(0), relabel_nodes=True)
-            induced_nodes.append(subset)
-            induced_edge_idxs.append(sub_edge_index)
+        if smallest_size or largest_size:
+            edges, _ = subgraph(subset, dataset.edge_index, num_nodes=dataset.x.size(0), relabel_nodes=True)
+            
+        induced_nodes[index] = subset
+        induced_edge_idxs[index] = edges
 
-        return induced_nodes, induced_edge_idxs
+    return induced_nodes, induced_edge_idxs
+
+
+def get_nids(num_nodes, all_nids, ego_idxs):
+    nids = [all_nids[idx.item()] for idx in ego_idxs]
+    all_idxs = torch.cat(nids).unique()
+    mask = torch.ones((num_nodes,), dtype=int)
+    mask[all_idxs] = 0
+    diffs = mask.cumsum(dim=0)
+    for i, nid in enumerate(nids):
+        nids[i] = torch.as_tensor([j-diffs[j] for j in nid])
+    return nids, all_idxs
+
+
+class InducedDataset(Dataset):
+    def __init__(self, node_ids, edge_idxs, x, y, **kwargs) -> None:
+        super(InducedDataset, self).__init__()
+        self.x = x
+        self.all_nids = node_ids
+        self.all_edges = edge_idxs
+        self.y = y
+
+    def _copy_idxs(self, ego_idxs):
+        nids, all_idxs = get_nids(self.x.size(0), self.all_nids, ego_idxs)
+        induced_ds = InducedDataset(
+            nids,
+            [self.all_edges[idx.item()] for idx in ego_idxs],
+            self.x[all_idxs],
+            self.y[ego_idxs]
+        )
+        return induced_ds
 
     def __len__(self):
-        return self._data.x.size(0)
+        return len(self.all_nids)
 
     def __getitem__(self, idx):
-        x = self._data.x[self.all_nids[idx]]
-        y = self._data.y[idx]
+        x = self.x[self.all_nids[idx]]
+        y = self.y[idx]
         edges = self.all_edges[idx]
         return Data(x=x, edge_index=edges, y=y)
 
@@ -781,20 +906,24 @@ class SubgraphSet(Dataset):
 class NodeToGraphDataset(GDataset):
     def __init__(self,
                  main_dataset,
+                 all_idxs,
+                 all_nids,
+                 all_edges,
+                 ego_idxs,
                  n_hopes = 2,
                  **kwargs) -> None:
         super(NodeToGraphDataset, self).__init__()
-        if isinstance(main_dataset, PyG_Dataset):
-            self._data = main_dataset._data
-        elif isinstance(main_dataset, Data):
-            self._data = main_dataset
-        else:
-            raise "Data type is not supported!"
+        self._data = InducedDataset( 
+            all_nids, 
+            all_edges,
+            main_dataset._data.x[all_idxs],
+            main_dataset._data.y[ego_idxs]
+        )
         self.n_feats = main_dataset.x.size(1)
         self.num_nsamples = main_dataset.x.size(0)
         self.num_nclass = main_dataset.y.unique().size(0)
         self.num_gclass = self.num_nclass
-        self.num_gsamples = self.num_nsamples
+        self.num_gsamples = len(self._data)
         self.n_hopes = n_hopes
 
     @property
@@ -803,17 +932,17 @@ class NodeToGraphDataset(GDataset):
 
     def normalize_feats_(self, normalize_mode, **kwargs):
         if self.base_ds is not None:
-            _, train_normal_params = normalize_(self.base_ds._data.x, dim=0, mode=normalize_mode)
-            self.train_ds._data.x, _ = normalize_(self.train_ds._data.x, dim=0, mode=normalize_mode, normal_params = train_normal_params)
+            _, train_normal_params = normalize_(self.base_ds.x, dim=0, mode=normalize_mode)
+            self.train_ds.x, _ = normalize_(self.train_ds.x, dim=0, mode=normalize_mode, normal_params = train_normal_params)
         else:
-            self.train_ds._data.x, train_normal_params = normalize_(self.train_ds._data.x, dim=0, mode=normalize_mode)
+            self.train_ds.x, train_normal_params = normalize_(self.train_ds.x, dim=0, mode=normalize_mode)
         if self.n_valid > 0:
-            self.valid_ds._data.x, _ = normalize_(
-                self.valid_ds._data.x, dim=0, 
+            self.valid_ds.x, _ = normalize_(
+                self.valid_ds.x, dim=0, 
                 mode=normalize_mode, normal_params = train_normal_params)
         if self.n_test > 0:
-            self.test_ds._data.x, _ = normalize_(
-                self.test_ds._data.x, dim=0, 
+            self.test_ds.x, _ = normalize_(
+                self.test_ds.x, dim=0, 
                 mode=normalize_mode, normal_params = train_normal_params)
 
     def init_loaders_(self, batch_size, loader_collate = graph_collate):
@@ -840,21 +969,12 @@ class NodeToGraphDataset(GDataset):
             shuffle = shuffle, seed = kwargs["seed"] if "seed" in kwargs else 2411
         )
         if label_reduction > 0.0:
-            self.base_ds = self._data.copy(self.all_idxs[:self.n_train])
+            self.base_ds = self._data._copy_idxs(self.all_idxs[:self.n_train])
         else:
             self.base_ds = None
-        self.train_ds = SubgraphSet(
-            deepcopy(self._data.subgraph(self.train_idxs)),
-            n_hopes = self.n_hopes
-            )
-        self.valid_ds = SubgraphSet(
-            deepcopy(self._data.subgraph(self.valid_idxs)),
-            n_hopes = self.n_hopes
-            )
-        self.test_ds = SubgraphSet(
-            deepcopy(self._data.subgraph(self.test_idxs)),
-            n_hopes = self.n_hopes
-            )
+        self.train_ds = self._data._copy_idxs(self.train_idxs)
+        self.valid_ds = self._data._copy_idxs(self.valid_idxs)
+        self.test_ds = self._data._copy_idxs(self.test_idxs)
         if normalize_mode is not None:
             self.normalize_feats_(normalize_mode)
         self.init_loaders_(batch_size, loader_collate)
@@ -1005,6 +1125,27 @@ class EgoNetworkDataset(GDataset):
         if normalize_mode is not None:
             self.normalize_feats_(normalize_mode)
         self.init_loaders_(batch_size, loader_collate)
+
+
+def graph_homophily_splits(dataset, src_ratio, n_node_cls, select_mode="soft"):
+    n_graphs = len(dataset)
+    homophily_ratios = torch.zeros((n_graphs,), dtype = torch.float)
+    for i, graph in enumerate(dataset):
+        # same_edge = (graph.x[graph.edge_index[0, :], -n_node_cls:] * graph.x[graph.edge_index[1, :], -n_node_cls:]).sum()
+        # homophily_ratios[i] = same_edge / max(1, graph.edge_index.size(1))
+        y = graph.x[:, -n_node_cls:].argmax(dim=1)
+        homophily_ratios[i] = homophily(graph.edge_index, y, method="edge")
+    if select_mode == "soft":
+        selec_probs = homophily_ratios / homophily_ratios.sum()
+        src_idxs = torch.as_tensor(np.random.choice(n_graphs, int(n_graphs * src_ratio), replace=False, p=selec_probs.numpy()))
+    else:
+        _, sorted_idxs = homophily_ratios.sort(descending=False)
+        src_idxs = sorted_idxs[int(n_graphs * src_ratio):]
+    src_idxs = src_idxs.sort().values
+    select_mask = torch.zeros((n_graphs,), dtype=bool)
+    select_mask[src_idxs] = True
+    tgt_idxs = (~select_mask).nonzero().T[0]
+    return src_idxs, tgt_idxs
 
 
 class FromPyGGraph(GDataset):
@@ -1193,12 +1334,14 @@ class GenDataset(object):
         shift_mode = "class_wise",
         s_split = [0.8, 0.2],
         t_split = [0.8, 0.2],
+        src_ratio = 0.5,
         batch_size = 32,
         n_hopes = 2,
         norm_mode = "max",
         node_attributes = True,
         label_reduction = 0.0,
-        seed = 2411
+        seed = 2411,
+        select_mode = "soft"
     ):
 
         """ Currently supported datasets:
@@ -1208,79 +1351,57 @@ class GenDataset(object):
             root = f'data/{ds_name}',
             name = ds_name
             )
-
-        ntotal_graphs = dataset._data.size(0)
-        train_idxs = torch.nonzero(dataset._data.train_mask).view(-1)
-        valid_idxs = torch.nonzero(dataset._data.val_mask).view(-1)
-        test_idxs = torch.nonzero(dataset._data.test_mask).view(-1)
-        other_mask = ~dataset._data.train_mask.logical_or(dataset._data.val_mask).logical_or(dataset._data.test_mask)
-        other_idxs = torch.nonzero(other_mask).view(-1)
-        n_train = train_idxs.size(0)
-        n_val = valid_idxs.size(0)
-        n_test = test_idxs.size(0)
-        n_other = other_idxs.size(0)
+        
         fix_seed(seed)
-        train_perm = torch.randperm(n_train)
-        valid_perm = torch.randperm(n_val)
-        test_perm = torch.randperm(n_test)
-        other_perm = torch.randperm(n_other)
-        s_perm = torch.cat([
-            train_idxs[train_perm[:n_train//2]],
-            valid_idxs[valid_perm[:n_val//2]],
-            test_idxs[test_perm[:n_test//2]],
-            other_idxs[other_perm[:n_other//2]],
-            ])
-        t_perm = torch.cat([
-            train_idxs[train_perm[n_train//2:]],
-            valid_idxs[valid_perm[n_val//2:]],
-            test_idxs[test_perm[n_test//2:]],
-            other_idxs[other_perm[n_other//2:]],
-            ])
-        s_data = deepcopy(dataset._data.subgraph(s_perm))
-        t_data = deepcopy(dataset._data.subgraph(t_perm))
+        all_nids, all_edges = get_induced_graphs(dataset._data, n_hops=1)
+        src_ego_idxs, tgt_ego_idxs = node_ppr_splits(dataset._data, src_ratio, select_mode, drop_unconnected=False)
+        s_data = deepcopy(dataset._data.subgraph(src_ego_idxs))
+        t_data = deepcopy(dataset._data.subgraph(tgt_ego_idxs))
+        src_nids, src_edges = get_induced_graphs(s_data, n_hops=2)
+        tgt_nids, tgt_edges = get_induced_graphs(t_data, n_hops=2)
+        src_nids, src_edges, src_mapping = merge_induced_graphs(src_ego_idxs, all_nids, src_nids, src_edges)
+        tgt_nids, tgt_edges, tgt_mapping = merge_induced_graphs(tgt_ego_idxs, all_nids, tgt_nids, tgt_edges)
+        
+        def get_all_idxs(ego_idxs, aux_mapping):
+            aux_mapping = torch.as_tensor(list(aux_mapping.items()))
+            aux_mapping = aux_mapping[aux_mapping[:, 1].sort().indices, :]
+            assert (~torch.isin(ego_idxs, aux_mapping[:, 0])).all()
+            ego_all_idxs = torch.cat((ego_idxs, aux_mapping[:, 0]))
+            return ego_all_idxs
+        
+        src_all_idxs = get_all_idxs(src_ego_idxs, src_mapping)
+        tgt_all_idxs = get_all_idxs(tgt_ego_idxs, tgt_mapping)
+    
         s_dataset = NodeToGraphDataset(
-            s_data,
-            n_hopes = n_hopes
-            )
-        s_n_train = train_perm[:n_train//2].size(0)
-        s_n_valid = valid_perm[:n_val//2].size(0)
-        s_n_test = test_perm[:n_test//2].size(0)
+            dataset,
+            src_all_idxs,
+            src_nids,
+            src_edges,
+            src_ego_idxs
+        )
         s_dataset.initialize(
-            train_idxs = torch.arange(s_n_train),
-            valid_idxs = torch.arange(s_n_train, s_n_train + s_n_valid),
-            test_idxs = torch.arange(s_n_train + s_n_valid, s_n_train + s_n_valid + s_n_test),
+            train_test_split = s_split,
             batch_size = batch_size,
             normalize_mode = norm_mode,
-            shuffle = False,
-            label_reduction = 0.0
-            )
-        if shift_type == "feature":
-            if shift_mode == "class_wise":
-                t_data = graph_ds_add_noise(t_data, mean_shift, cov_scale)
-            else:
-                t_data.x[torch.arange(t_data.x.size(0)), :] = add_multivariate_noise(
-                    t_data.x[torch.arange(t_data.x.size(0)), :], mean_shift, cov_scale
-                )
-        elif shift_type == "structural":
-            t_data = add_structural_noise(t_data, p_intra, p_inter)
-        else:
-            print("shift type is not implemented yet")
+            shuffle = True,
+            label_reduction = 0.0,
+            seed = seed
+        )
         t_dataset = NodeToGraphDataset(
-            t_data,
-            n_hopes = n_hopes
-            )
-        t_n_train = train_perm[n_train//2:].size(0)
-        t_n_valid = valid_perm[n_val//2:].size(0)
-        t_n_test = test_perm[n_test//2:].size(0)
+            dataset,
+            tgt_all_idxs,
+            tgt_nids,
+            tgt_edges,
+            tgt_ego_idxs
+        )
         t_dataset.initialize(
-            train_idxs = torch.arange(t_n_train),
-            valid_idxs = torch.arange(t_n_train, t_n_train + t_n_valid),
-            test_idxs = torch.arange(t_n_train + t_n_valid, t_n_train + t_n_valid + t_n_test),
+            train_test_split = t_split,
             batch_size = batch_size,
             normalize_mode = norm_mode,
-            shuffle = False,
-            label_reduction = label_reduction
-            )
+            shuffle = True,
+            label_reduction = label_reduction,
+            seed = seed
+        )
         
         return s_dataset, t_dataset
 
@@ -1297,11 +1418,13 @@ class GenDataset(object):
         store_to_path = "./data",
         s_split = [0.8, 0.2],
         t_split = [0.8, 0.2],
+        src_ratio = 0.5,
         batch_size = 32,
         norm_mode = "max",
         node_attributes = True,
         label_reduction = 0.0,
         seed = 2411,
+        select_mode = "soft"
     ):
         
         """ Currently supported datasets: 
@@ -1314,15 +1437,33 @@ class GenDataset(object):
             use_node_attr = node_attributes
         )
 
-        ntotal_graphs = len(dataset)
+        if ds_name == "ENZYMES":
+            n_node_cls = 3
+        elif ds_name == "Mutagenicity":
+            n_node_cls = 14
+        elif ds_name == "PROTEINS":
+            n_node_cls = 3
+        elif ds_name == "AIDS":
+            n_node_cls = 38
+        elif ds_name == "Yeast":
+            n_node_cls = 74
+        elif ds_name == "DD":
+            n_node_cls = 89
+
         fix_seed(seed)
-        perm = torch.randperm(ntotal_graphs)
-        s_perm = perm[:int(ntotal_graphs*0.5)]
-        t_perm = perm[int(ntotal_graphs*0.5):]
-        domain_idx_dict = {0:s_perm, 1:t_perm}
+        if shift_type == "structural":
+            if shift_mode == "homophily":
+                src_idxs, tgt_idxs = graph_homophily_splits(dataset, src_ratio, n_node_cls, select_mode)
+        else:
+            ntotal_graphs = len(dataset)
+            perm = torch.randperm(ntotal_graphs)
+            src_idxs = perm[:int(ntotal_graphs * src_ratio)]
+            tgt_idxs = perm[int(ntotal_graphs * src_ratio):]
+
+        domain_idx_dict = {0:src_idxs, 1:tgt_idxs}
         DomianShift.save_to_file(ds_name, domain_idx_dict)
-        s_ds = dataset.copy(s_perm)
-        t_ds = dataset.copy(t_perm)
+        s_ds = dataset.copy(src_idxs)
+        t_ds = dataset.copy(tgt_idxs)
 
         s_dataset = FromPyGGraph(s_ds)
         s_dataset.initialize(
@@ -1341,12 +1482,10 @@ class GenDataset(object):
                 t_ds.x[torch.arange(t_ds.x.size(0)), :] = add_multivariate_noise(
                     t_ds.x[torch.arange(t_ds.x.size(0)), :], mean_shift, cov_scale
                 )
-        elif shift_type == "structural":
-            p_intra = {0:-0.2, 1:-0.2, 2:-0.3, 3:-0.2, 4:-0.5, 5:-0.2}
-            p_inter = {0:0.3, 1:0.6, 2:0.3, 3:0.2, 4:0.3, 5:0.4}
-            t_ds = structural_noise_to_graph(t_ds, p_intra, p_inter)
-        else:
+
+        if  shift_type not in ["feature", "structural"]:
             print("shift type is not implemented yet")
+            
         t_dataset = FromPyGGraph(t_ds)
         t_dataset.initialize(
             train_test_split = t_split,

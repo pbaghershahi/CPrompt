@@ -38,6 +38,7 @@ def main(args) -> None:
     exec_name = datetime.today().strftime('%Y-%m-%d-%H-%M-%S')
     log_file_path = "./log/"+exec_name+".log"
     logger = setup_logger(name=exec_name, level=logging.INFO, log_file=log_file_path)
+    logger.info(f"Logging to: {log_file_path}")
     if args.config_from_file != "":
         logger.info(f"Reading config from: {args.config_from_file}")
         with open(args.config_from_file, 'r') as infile:
@@ -80,9 +81,10 @@ def main(args) -> None:
                 norm_mode = "normal",
                 node_attributes = True,
                 label_reduction = args.label_reduction,
-                seed = arg_seeds[i]
+                seed = arg_seeds[i],
+                select_mode = args.noise_select_mode
             )
-        elif args.s_dataset in ["ENZYMES", "PROTEINS", "Mutagenicity", "PROTEINS_full", "AIDS"]:
+        elif args.s_dataset in ["ENZYMES", "PROTEINS", "Mutagenicity", "Yeast", "DD", "AIDS"]:
             s_dataset, t_dataset = gen_ds.get_graph_dataset(
                 args.s_dataset,
                 shift_type = args.shift_type,
@@ -94,11 +96,13 @@ def main(args) -> None:
                 store_to_path = "./data/TUDataset",
                 s_split = args.s_split,
                 t_split = args.t_split,
+                src_ratio = args.src_ratio,
                 batch_size = args.batch_size,
                 norm_mode = "normal",
                 node_attributes = True,
                 label_reduction = args.label_reduction,
-                seed = arg_seeds[i]
+                seed = arg_seeds[i],
+                select_mode = args.noise_select_mode
             )
         elif args.s_dataset in ["Letter-high", "Letter-low", "Letter-med"]:
             s_dataset, t_dataset = gen_ds.get_pyggda_dataset(
@@ -251,6 +255,33 @@ def main(args) -> None:
                 w_softmax_loss = args.w_softmax_loss,
                 w_domain_loss = args.w_domain_loss,
             )
+        elif args.prompt_method == "fix_match":
+            prompt_config = dict(
+                emb_dim = t_dataset.n_feats,
+                h_dim = args.h_dim,
+                output_dim = t_dataset.n_feats,
+                prompt_fn = args.prompt_fn,
+                token_num = num_tokens,
+                cross_prune = args.cross_prune,
+                inner_prune = args.inner_prune,
+            )
+            training_config = dict(
+                aug_type = args.aug_type,
+                pos_aug_mode = args.pos_aug_mode,
+                p_raug = args.p_raug,
+                n_epochs = args.n_epochs,
+                r_reg = args.r_reg,
+                soft_label = args.soft_label,
+                clutering_iters = args.clutering_iters,
+                iterative_clustering = args.iterative_clustering,
+                entropy_div_ratio = args.entropy_div_ratio,
+                w_entropy_loss = args.w_entropy_loss,
+                w_softmax_loss = args.w_softmax_loss,
+                w_domain_loss = args.w_domain_loss,
+                cut_off = args.cut_off,
+                light_aug_prob = args.light_aug_prob,
+                light_aug_mode = args.light_aug_mode,
+            )
         else:
             raise Exception("The chosen method is not valid!")
 
@@ -329,13 +360,18 @@ if __name__ == '__main__':
     parser.add_argument("--step-size", type=int, help="Learning rate step size for prompt tuning")
     parser.add_argument("--gamma", type=float, help="Learning rate gamma for prompt tuning")
     parser.add_argument("--batch-size", type=int, help="Batch size for prompt tuning")
+    parser.add_argument("--src-ratio", type=float, help="Split ratio for the source dataset")
     parser.add_argument("--dropout", type=float, help="Dropout for prompt tuning")
+    parser.add_argument("--cut-off", type=float, default=0.5, help="Cut-off threshold for pseudo labels")
     parser.add_argument("--aug-type", type=str, default="feature", help="Augmentation Type: [feature, structural]")
+    parser.add_argument("--light-aug-prob", type=float, default=0.1, help="Probability of light augmentation augmentation")
+    parser.add_argument("--light-aug-mode", type=str, default="mask", help="Light augmentation mode: [mask, arbitrary]")
     parser.add_argument("--pos-aug-mode", type=str, default="mask", help="Positive augmentation mode: [mask, arbitrary]")
     parser.add_argument("--neg-aug-mode", type=str, default="arbitrary", help="Negative augmentation mode: [mask, arbitrary]")
     parser.add_argument("--noise-cov-scale", type=float, help="Noise covariance scale")
     parser.add_argument("--noise-mean-shift", type=float, help="Noise mean")
-    parser.add_argument("--noise-shift-mode", type=str, help="Noise shift mode: [class-wise]")
+    parser.add_argument("--noise-shift-mode", type=str, help="Noise shift mode: [class-wise, homophily]")
+    parser.add_argument("--noise-select-mode", type=str, default="soft", help="Shift selection mode for spliting dataset: [soft, hard]")
     parser.add_argument("--cross-prune", type=float, help="Cross prune threshold")
     parser.add_argument("--inner-prune", type=float, help="Inner prune threshold")
     parser.add_argument("--num-runs", type=int, help="Numer of runs per trial")
@@ -346,6 +382,6 @@ if __name__ == '__main__':
     parser.add_argument("--seed", nargs='*', default=[], type=int, help="Seed for random")
     parser.add_argument("--config-from-file", type=str, default="", help="Config file to read from")
     parser.add_argument("--config-to-file", type=str, default="", help="Config file to save to")
-    parser.add_argument("--label-reduction", type=float, default=00.0, help="Percentage of label reduction")
+    parser.add_argument("--label-reduction", type=float, default=0.0, help="Percentage of label reduction")
     args = parser.parse_args()
     main(args)
