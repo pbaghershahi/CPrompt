@@ -14,20 +14,25 @@ from sklearn.mixture import GaussianMixture
 from collections import OrderedDict
 from copy import deepcopy
 from sklearn.utils import shuffle as sk_shuffl
-from networkx import pagerank
+from networkx import pagerank, diameter, all_pairs_shortest_path, density
 import ipdb
 import gc
 
 
 def graph_collate(batch):
+    g_list = []
+    idxs = []
     if not isinstance(batch, list):
-        g_list = []
         for g in batch:
-            g_list.extend(g)
+            g_list.extend(g[0])
+            idxs.append(g[1])
     else:
-        g_list = batch
+        for d in batch:
+            g_list.append(d[0])
+            idxs.append(d[1])
     g_batch = Batch.from_data_list(g_list)
-    return g_batch
+    idxs = torch.as_tensor(idxs)
+    return g_batch, idxs
 
 
 def add_multivariate_noise(features, mean_shift, cov_scale) -> None:
@@ -659,6 +664,15 @@ class GDataset(nn.Module):
         "Implement this is children classes"
         return "x"
 
+    def reset_preds(self,):
+        self.train_ds._reset_preds()
+        
+    def update_preds(self, idxs, preds):
+        self.train_ds._update_preds(idxs, preds)
+
+    def get_preds(self,):
+        return self.train_ds._get_preds()
+
     def init_ds_idxs_(self, train_idxs, valid_idxs, test_idxs, train_test_split, label_reduction, shuffle, seed):
         if (train_idxs is not None) and (valid_idxs is not None) and (test_idxs is not None):
             self.n_train = train_idxs.size(0)
@@ -696,12 +710,22 @@ class SimpleDataset(Dataset):
                  **kwargs) -> None:
         super(SimpleDataset, self).__init__()
         self._data = graph_list
+        self.preds = torch.ones((len(graph_list),)).long() * -1
+
+    def _reset_preds(self,):
+        self.preds = torch.ones_like(self.preds).long() * -1
+
+    def _update_preds(self, idxs, preds):
+        self.preds[idxs] = preds
+
+    def _get_preds(self):
+        return self.preds
 
     def __len__(self):
         return len(self._data)
 
     def __getitem__(self, idx):
-        return self._data[idx]
+        return self._data[idx], idx
 
 
 class SubsetSampler(Sampler):
@@ -882,7 +906,17 @@ class InducedDataset(Dataset):
         self.all_nids = node_ids
         self.all_edges = edge_idxs
         self.y = y
+        self.preds = torch.ones_like(self.y).long() * -1
 
+    def _reset_preds(self,):
+        self.preds = torch.ones_like(self.preds).long() * -1
+
+    def _update_preds(self, idxs, preds):
+        self.preds[idxs] = preds
+
+    def _get_preds(self):
+        return self.preds
+        
     def _copy_idxs(self, ego_idxs):
         nids, all_idxs = get_nids(self.x.size(0), self.all_nids, ego_idxs)
         induced_ds = InducedDataset(
@@ -1127,19 +1161,31 @@ class EgoNetworkDataset(GDataset):
         self.init_loaders_(batch_size, loader_collate)
 
 
-def graph_homophily_splits(dataset, src_ratio, n_node_cls, select_mode="soft"):
+def graph_property_splits(dataset, src_ratio, shift_mode="homophily", select_mode="soft", n_node_cls=None):
     n_graphs = len(dataset)
-    homophily_ratios = torch.zeros((n_graphs,), dtype = torch.float)
+    property_ratios = torch.zeros((n_graphs,), dtype = torch.float)
     for i, graph in enumerate(dataset):
-        # same_edge = (graph.x[graph.edge_index[0, :], -n_node_cls:] * graph.x[graph.edge_index[1, :], -n_node_cls:]).sum()
-        # homophily_ratios[i] = same_edge / max(1, graph.edge_index.size(1))
-        y = graph.x[:, -n_node_cls:].argmax(dim=1)
-        homophily_ratios[i] = homophily(graph.edge_index, y, method="edge")
+        if shift_mode == "homophily":
+            # same_edge = (graph.x[graph.edge_index[0, :], -n_node_cls:] * graph.x[graph.edge_index[1, :], -n_node_cls:]).sum()
+            # homophily_ratios[i] = same_edge / max(1, graph.edge_index.size(1))
+            y = graph.x[:, -n_node_cls:].argmax(dim=1)
+            property_ratios[i] = homophily(graph.edge_index, y, method="edge")
+        elif shift_mode == "diameter":
+            all_paths = all_pairs_shortest_path(to_networkx(graph))
+            max_diameter = 0
+            for outer_key, outer_value in dict(all_paths).items():
+                for inner_key, inner_value in outer_value.items():
+                    max_diameter = max(len(inner_value)-1, max_diameter)
+            property_ratios[i] = max_diameter
+        elif shift_mode == "density":
+            property_ratios[i] = density(to_networkx(g))
+        else:
+            raise Exception("Shift mode is not supported.")
     if select_mode == "soft":
-        selec_probs = homophily_ratios / homophily_ratios.sum()
+        selec_probs = property_ratios / property_ratios.sum()
         src_idxs = torch.as_tensor(np.random.choice(n_graphs, int(n_graphs * src_ratio), replace=False, p=selec_probs.numpy()))
     else:
-        _, sorted_idxs = homophily_ratios.sort(descending=False)
+        _, sorted_idxs = property_ratios.sort(descending=False)
         src_idxs = sorted_idxs[int(n_graphs * src_ratio):]
     src_idxs = src_idxs.sort().values
     select_mask = torch.zeros((n_graphs,), dtype=bool)
@@ -1437,23 +1483,11 @@ class GenDataset(object):
             use_node_attr = node_attributes
         )
 
-        if ds_name == "ENZYMES":
-            n_node_cls = 3
-        elif ds_name == "Mutagenicity":
-            n_node_cls = 14
-        elif ds_name == "PROTEINS":
-            n_node_cls = 3
-        elif ds_name == "AIDS":
-            n_node_cls = 38
-        elif ds_name == "Yeast":
-            n_node_cls = 74
-        elif ds_name == "DD":
-            n_node_cls = 89
+        n_node_cls = dataset.num_node_labels
 
         fix_seed(seed)
         if shift_type == "structural":
-            if shift_mode == "homophily":
-                src_idxs, tgt_idxs = graph_homophily_splits(dataset, src_ratio, n_node_cls, select_mode)
+            src_idxs, tgt_idxs = graph_property_splits(dataset, src_ratio, shift_mode, select_mode, n_node_cls)
         else:
             ntotal_graphs = len(dataset)
             perm = torch.randperm(ntotal_graphs)
@@ -1474,7 +1508,7 @@ class GenDataset(object):
             label_reduction = 0.0,
             seed = seed
         )
-        # ipdb.set_trace()
+
         if shift_type == "feature":
             if shift_mode == "class_wise":
                 t_ds = graph_ds_add_noise(t_ds, mean_shift, cov_scale)
@@ -1482,9 +1516,8 @@ class GenDataset(object):
                 t_ds.x[torch.arange(t_ds.x.size(0)), :] = add_multivariate_noise(
                     t_ds.x[torch.arange(t_ds.x.size(0)), :], mean_shift, cov_scale
                 )
-
         if  shift_type not in ["feature", "structural"]:
-            print("shift type is not implemented yet")
+            raise Exception("Shift type is not supported!")
             
         t_dataset = FromPyGGraph(t_ds)
         t_dataset.initialize(

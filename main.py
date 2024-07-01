@@ -84,7 +84,7 @@ def main(args) -> None:
                 seed = arg_seeds[i],
                 select_mode = args.noise_select_mode
             )
-        elif args.s_dataset in ["ENZYMES", "PROTEINS", "Mutagenicity", "Yeast", "DD", "AIDS"]:
+        elif args.s_dataset in ["ENZYMES", "PROTEINS", "Mutagenicity", "AIDS", "NCI1", "DHFR", "COX2"]:
             s_dataset, t_dataset = gen_ds.get_graph_dataset(
                 args.s_dataset,
                 shift_type = args.shift_type,
@@ -174,7 +174,7 @@ def main(args) -> None:
             logger.info(f"Loading previous pretrained model at {pretrained_paths[i]}")
 
         pretrained_config = model_config
-        num_tokens = int(np.ceil(cal_avg_num_nodes(t_dataset)))
+        num_tokens = int(np.ceil(cal_avg_num_nodes(t_dataset))) if args.num_tokens == -1 else args.num_tokens
         optimizer_config = dict(
             lr = args.lr,
             scheduler_step_size = args.step_size,
@@ -255,7 +255,7 @@ def main(args) -> None:
                 w_softmax_loss = args.w_softmax_loss,
                 w_domain_loss = args.w_domain_loss,
             )
-        elif args.prompt_method == "fix_match":
+        elif args.prompt_method in ["fix_match", "flex_match"]:
             prompt_config = dict(
                 emb_dim = t_dataset.n_feats,
                 h_dim = args.h_dim,
@@ -278,13 +278,13 @@ def main(args) -> None:
                 w_entropy_loss = args.w_entropy_loss,
                 w_softmax_loss = args.w_softmax_loss,
                 w_domain_loss = args.w_domain_loss,
-                cut_off = args.cut_off,
                 light_aug_prob = args.light_aug_prob,
                 light_aug_mode = args.light_aug_mode,
             )
         else:
             raise Exception("The chosen method is not valid!")
 
+        training_config.update(num_classes = t_dataset.num_gclass, cut_off = args.cut_off)
         if i % 5 == 0:
             logger.info(f"Prompting method: {args.prompt_method} -- Setting: Prompting function: {args.prompt_fn} -- Target Dataset: {t_ds_name}")
             logger.info(f"Setting for prompt tuning: Prompt: {prompt_config} -- Pretrained Model: {pretrained_config} -- Optimizer: {optimizer_config} -- Training: {training_config}")
@@ -360,6 +360,7 @@ if __name__ == '__main__':
     parser.add_argument("--step-size", type=int, help="Learning rate step size for prompt tuning")
     parser.add_argument("--gamma", type=float, help="Learning rate gamma for prompt tuning")
     parser.add_argument("--batch-size", type=int, help="Batch size for prompt tuning")
+    parser.add_argument("--num-tokens", type=int, default=-1, help="Number of Tokens")
     parser.add_argument("--src-ratio", type=float, help="Split ratio for the source dataset")
     parser.add_argument("--dropout", type=float, help="Dropout for prompt tuning")
     parser.add_argument("--cut-off", type=float, default=0.5, help="Cut-off threshold for pseudo labels")

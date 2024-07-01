@@ -12,7 +12,7 @@ from sklearn.preprocessing import StandardScaler
 
 def cal_avg_num_nodes(dataset):
     total_num_nodes = 0
-    for batch in dataset.train_loader:
+    for batch, idxs in dataset.train_loader:
         total_num_nodes += batch.x.size(0)
     avg_num_nodes = total_num_nodes / dataset.n_train
     return avg_num_nodes
@@ -237,7 +237,7 @@ def test(model, dataset, device, binary_task, mode, pmodel = None, validation = 
         else:
             data_loader = dataset.test_loader
             n_samples = dataset.n_test
-        for i, batch in enumerate(data_loader):
+        for i, (batch, idxs) in enumerate(data_loader):
             # print("Test batch:", "@"*25, f"{i}/{len(dataset.test_loader)}", "@"*25, end='\r')
             temp_labels = batch.y.to(device)
             if mode == "prompt":

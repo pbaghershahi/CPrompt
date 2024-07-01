@@ -42,11 +42,11 @@ def pretrain_model(
     
     test_loss, test_acc, test_f1 = test(model, s_dataset, device, binary_task = binary_task, mode = "pretrain", validation = False)
     logger.info(f'GNN Before Pretraining: -- Test Loss: {test_loss:.3f} -- Test ACC: {test_acc:.3f} -- Test F1-score: {test_f1:.3f}')
-
+    # ipdb.set_trace()
     n_epochs = training_config["n_epochs"]
     for epoch in range(n_epochs):
         model.train()
-        for i, batch in enumerate(s_dataset.train_loader):
+        for i, (batch, idxs) in enumerate(s_dataset.train_loader):
             optimizer.zero_grad()
             scores, _ = model(
                 batch,
@@ -159,13 +159,15 @@ def prompting(
             pmodel = BasePrompt(**prompt_config)
         elif prompt_method == "fix_match":
             pmodel = BasePrompt(**prompt_config)
+        elif prompt_method == "flex_match":
+            pmodel = BasePrompt(**prompt_config)
         pmodel.to(device)
 
         
         optimizer = Adam(pmodel.parameters(), lr = optimizer_config["lr"], weight_decay = optimizer_config["weight_decay"])
         optimizer_d = Adam(discriminator.parameters(), lr = optimizer_config["lr"], weight_decay = optimizer_config["weight_decay"])
         scheduler = StepLR(optimizer, step_size = optimizer_config["scheduler_step_size"], gamma = optimizer_config["scheduler_gamma"])
-        Trainer = PromptTrainer(training_method, training_config)
+        Trainer = PromptTrainer(training_method, training_config, device)
     
         valid_average_acc = []
         valid_average_f1 = []
@@ -174,7 +176,7 @@ def prompting(
             pmodel.train()
             main_model.eval()
             loss = Trainer.train(
-                t_dataset, main_model, pmodel, optimizer, device, logger, 
+                t_dataset, main_model, pmodel, optimizer, logger, 
                 discriminator = discriminator, optimizer_d = optimizer_d
             )
             scheduler.step()
@@ -199,6 +201,8 @@ def prompting(
         logger.info(f"Test Results of Run {k}/{num_runs}: -- Test Loss: {test_loss:.3f} -- Test ACC: {test_acc:.3f} -- Test F1: {test_f1:.3f}")
         results["prompt_test_acc"].append(test_acc)
         results["prompt_test_f1"].append(test_f1)
+
+        t_dataset.reset_preds()
         
     results["prompt_valid_acc"] = np.array(results["prompt_valid_acc"]).mean()
     results["prompt_valid_f1"] = np.array(results["prompt_valid_f1"]).mean()
