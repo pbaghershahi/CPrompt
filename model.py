@@ -104,16 +104,19 @@ class PretrainedModel(nn.Module):
     
 
 class BasePrompt(nn.Module):
-    def __init__(self,
-                 emb_dim,
-                 h_dim,
-                 output_dim,
-                 prompt_fn = "add_tokens",
-                 token_num = 30,
-                 cross_prune=0.1, 
-                 inner_prune=0.3,
-                 attn_dropout=0.3,
-                 input_dropout=0.3) -> None:
+    def __init__(
+            self,
+            emb_dim,
+            h_dim,
+            output_dim,
+            prompt_fn = "add_tokens",
+            token_num = 30,
+            cross_prune=0.1, 
+            inner_prune=0.3,
+            attn_dropout=0.3,
+            input_dropout=0.3,
+            attn_with_param=False
+        ) -> None:
         super(BasePrompt, self).__init__()
         self.head = nn.Linear(h_dim, output_dim)
         self.emb_dim = emb_dim
@@ -121,6 +124,9 @@ class BasePrompt(nn.Module):
         self.token_embeds = torch.nn.Parameter(torch.empty(token_num, emb_dim))
         torch.nn.init.kaiming_uniform_(self.token_embeds, nonlinearity='leaky_relu', mode='fan_in', a=0.01)
         if prompt_fn == "gpf_plus":
+            self.attn_with_param = attn_with_param
+            if attn_with_param:
+                self.attn_linear = nn.Linear(2*emb_dim, 1)
             self.attn_dropout = attn_dropout
             self.prompt = self.gpf_plus
         elif prompt_fn == "add_tokens":
@@ -183,7 +189,17 @@ class BasePrompt(nn.Module):
 
     def gpf_plus(self, graphs):
         for graph in graphs:
-            attn_scores = F.softmax(graph.x @ self.token_embeds.T, dim = 1)
+            if self.attn_with_param:
+                n_t = self.token_embeds.size(0)
+                n_x = graph.x.size(0)
+                x = torch.cat((
+                    graph.x[:, None, :].tile(1, n_t, 1),
+                    self.token_embeds[None, :, :].tile(n_x, 1, 1)
+                ), dim=-1)
+                x = self.attn_linear(x).squeeze()
+                attn_scores = F.softmax(x, dim = 1)
+            else:
+                attn_scores = F.softmax(graph.x @ self.token_embeds.T, dim = 1)
             attn_scores = F.dropout(attn_scores, self.attn_dropout, training=self.training)
             prompt = attn_scores @ self.token_embeds
             graph.x = graph.x + prompt

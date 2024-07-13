@@ -1,4 +1,4 @@
-import torch, random, os, logging
+import torch, random, os, logging, shutil
 import torch.nn.functional as F
 import numpy as np
 import matplotlib.pyplot as plt
@@ -9,6 +9,22 @@ from torch_geometric.loader import DataLoader
 from torcheval.metrics.functional import multiclass_f1_score
 from torchmetrics.classification import BinaryF1Score, MulticlassF1Score
 from sklearn.preprocessing import StandardScaler
+
+
+def copy_files(file_paths, dest_dir):
+    if isinstance(file_paths, str):
+        file_paths = file_paths.split(" ")
+    if not os.path.exists(dest_dir):
+        os.makedirs(dest_dir, exist_ok=True)
+
+    for file_path in file_paths:
+        try:
+            shutil.copy(file_path, dest_dir)
+            print(f"Copied {file_path} to {dest_dir}")
+        except FileNotFoundError:
+            print(f"File not found: {file_path}")
+        except Exception as e:
+            print(f"Error copying {file_path}: {e}")
 
 def cal_avg_num_nodes(dataset):
     total_num_nodes = 0

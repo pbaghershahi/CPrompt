@@ -264,6 +264,7 @@ def main(args) -> None:
                 token_num = num_tokens,
                 cross_prune = args.cross_prune,
                 inner_prune = args.inner_prune,
+                attn_with_param = args.attn_with_param
             )
             training_config = dict(
                 aug_type = args.aug_type,
@@ -332,6 +333,7 @@ if __name__ == '__main__':
     parser.add_argument("--save-pretrained", action='store_true')
     parser.add_argument("--soft-label", action='store_true')
     parser.add_argument("--add-link-loss", action='store_true')
+    parser.add_argument("--attn-with-param", action='store_true')
     parser.add_argument("--empty-pretrained-dir", action='store_true')
     parser.add_argument("--iterative-clustering", action='store_true')
     parser.add_argument("--clutering-iters", type=int, default=3, help="Total rounds of updating cluster centers")
@@ -371,7 +373,7 @@ if __name__ == '__main__':
     parser.add_argument("--neg-aug-mode", type=str, default="arbitrary", help="Negative augmentation mode: [mask, arbitrary]")
     parser.add_argument("--noise-cov-scale", type=float, help="Noise covariance scale")
     parser.add_argument("--noise-mean-shift", type=float, help="Noise mean")
-    parser.add_argument("--noise-shift-mode", type=str, help="Noise shift mode: [class-wise, homophily]")
+    parser.add_argument("--noise-shift-mode", type=str, help="Noise shift mode: [homophily]")
     parser.add_argument("--noise-select-mode", type=str, default="soft", help="Shift selection mode for spliting dataset: [soft, hard]")
     parser.add_argument("--cross-prune", type=float, help="Cross prune threshold")
     parser.add_argument("--inner-prune", type=float, help="Inner prune threshold")

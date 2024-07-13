@@ -27,7 +27,7 @@ n_raug: 0.15
 neg_aug_mode: arbitrary
 noise_cov_scale: 1.0
 noise_mean_shift: 5.0
-noise_shift_mode: class_wise
+noise_shift_mode: homophily
 num_runs: 2
 p_raug: 0.15
 p_shift_inter: null

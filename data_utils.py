@@ -833,15 +833,18 @@ def merge_induced_graphs(ref_idxs, all_nids, nids, edges):
         n_unmatched = unmatched_idxs.size(0)
         mapped_unmachted = torch.ones_like(unmatched_idxs) * -1
         ego_arg = (nids[i] == i).nonzero().T[0]
+
         for j, k in enumerate(unmatched_idxs.tolist()):
             if k not in mapping:
                 mapping[k] = last_id
                 last_id = last_id + 1
             mapped_unmachted[j] = mapping[k]
+
         new_edge_tgts = torch.arange(n_unmatched) + nids[i].size(0)
         temp_edges = torch.cat((ego_arg.tile(1, n_unmatched), new_edge_tgts[None, :]), dim=0)
         new_edges[i] = torch.cat((edges[i], temp_edges, temp_edges[[1, 0], :]), dim=1)
         new_nids[i] = torch.cat((nids[i], mapped_unmachted))
+
         assert new_edges[i].max()+1 == new_nids[i].size(0)
         assert is_undirected(edges[i])
     return new_nids, new_edges, mapping
@@ -934,12 +937,12 @@ class InducedDataset(Dataset):
         x = self.x[self.all_nids[idx]]
         y = self.y[idx]
         edges = self.all_edges[idx]
-        return Data(x=x, edge_index=edges, y=y)
+        return Data(x=x, edge_index=edges, y=y), idx
 
 
 class NodeToGraphDataset(GDataset):
     def __init__(self,
-                 main_dataset,
+                 main_data,
                  all_idxs,
                  all_nids,
                  all_edges,
@@ -950,12 +953,12 @@ class NodeToGraphDataset(GDataset):
         self._data = InducedDataset( 
             all_nids, 
             all_edges,
-            main_dataset._data.x[all_idxs],
-            main_dataset._data.y[ego_idxs]
+            main_data.x[all_idxs],
+            main_data.y[ego_idxs]
         )
-        self.n_feats = main_dataset.x.size(1)
-        self.num_nsamples = main_dataset.x.size(0)
-        self.num_nclass = main_dataset.y.unique().size(0)
+        self.n_feats = main_data.x.size(1)
+        self.num_nsamples = main_data.x.size(0)
+        self.num_nclass = main_data.y.unique().size(0)
         self.num_gclass = self.num_nclass
         self.num_gsamples = len(self._data)
         self.n_hopes = n_hopes
@@ -1164,6 +1167,7 @@ class EgoNetworkDataset(GDataset):
 def graph_property_splits(dataset, src_ratio, shift_mode="homophily", select_mode="soft", n_node_cls=None):
     n_graphs = len(dataset)
     property_ratios = torch.zeros((n_graphs,), dtype = torch.float)
+    print(shift_mode)
     for i, graph in enumerate(dataset):
         if shift_mode == "homophily":
             # same_edge = (graph.x[graph.edge_index[0, :], -n_node_cls:] * graph.x[graph.edge_index[1, :], -n_node_cls:]).sum()
@@ -1397,14 +1401,16 @@ class GenDataset(object):
             root = f'data/{ds_name}',
             name = ds_name
             )
-        
+        data = deepcopy(dataset._data.subgraph(dataset._data.edge_index.unique()))
+
         fix_seed(seed)
-        all_nids, all_edges = get_induced_graphs(dataset._data, n_hops=1)
-        src_ego_idxs, tgt_ego_idxs = node_ppr_splits(dataset._data, src_ratio, select_mode, drop_unconnected=False)
-        s_data = deepcopy(dataset._data.subgraph(src_ego_idxs))
-        t_data = deepcopy(dataset._data.subgraph(tgt_ego_idxs))
+        all_nids, all_edges = get_induced_graphs(data, n_hops=1)
+        src_ego_idxs, tgt_ego_idxs = node_ppr_splits(data, src_ratio, select_mode, drop_unconnected=False)
+        s_data = deepcopy(data.subgraph(src_ego_idxs))
+        t_data = deepcopy(data.subgraph(tgt_ego_idxs))
         src_nids, src_edges = get_induced_graphs(s_data, n_hops=2)
         tgt_nids, tgt_edges = get_induced_graphs(t_data, n_hops=2)
+
         src_nids, src_edges, src_mapping = merge_induced_graphs(src_ego_idxs, all_nids, src_nids, src_edges)
         tgt_nids, tgt_edges, tgt_mapping = merge_induced_graphs(tgt_ego_idxs, all_nids, tgt_nids, tgt_edges)
         
@@ -1417,9 +1423,9 @@ class GenDataset(object):
         
         src_all_idxs = get_all_idxs(src_ego_idxs, src_mapping)
         tgt_all_idxs = get_all_idxs(tgt_ego_idxs, tgt_mapping)
-    
+
         s_dataset = NodeToGraphDataset(
-            dataset,
+            data,
             src_all_idxs,
             src_nids,
             src_edges,
@@ -1434,7 +1440,7 @@ class GenDataset(object):
             seed = seed
         )
         t_dataset = NodeToGraphDataset(
-            dataset,
+            data,
             tgt_all_idxs,
             tgt_nids,
             tgt_edges,
