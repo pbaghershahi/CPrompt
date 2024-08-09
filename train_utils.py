@@ -117,9 +117,7 @@ def prompting(
         "hidden_channels":pretrained_config["hidden_channels"], 
         "out_channels":1, "num_layers":2, "dropout":pretrained_config["dropout"]
     }
-    discriminator = Discriminator(**discr_config)
     main_model.to(device)
-    discriminator.to(device)
     load_model(main_model, read_checkpoint=True, pretrained_path=pretrained_path)
     for param in main_model.parameters():
         param.requires_grad = False
@@ -163,6 +161,8 @@ def prompting(
             pmodel = BasePrompt(**prompt_config)
         pmodel.to(device)
 
+        discriminator = Discriminator(**discr_config)
+        discriminator.to(device)
         
         optimizer = Adam(pmodel.parameters(), lr = optimizer_config["lr"], weight_decay = optimizer_config["weight_decay"])
         optimizer_d = Adam(discriminator.parameters(), lr = optimizer_config["lr"], weight_decay = optimizer_config["weight_decay"])

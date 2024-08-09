@@ -1,0 +1,737 @@
+2024-07-16,20:47:00 [INFO] Logging to: ./log/2024-07-16-20-47-00.log
+2024-07-16,20:47:00 [INFO] Reading config from: ./config/dhfr.yaml
+2024-07-16,20:47:00 [INFO] Namespace(total_iters=10, prompt_method='flex_match', s_dataset='DHFR', t_dataset='DHFR', prompt_fn='gpf_plus', shift_type='structural', p_shift_intra=0.0, p_shift_inter=0.0, pretrain=True, save_pretrained=False, soft_label=False, add_link_loss=False, attn_with_param=False, empty_pretrained_dir=False, iterative_clustering=False, clutering_iters=3, entropy_div_ratio=3, w_entropy_loss=0.0, w_softmax_loss=0.0, w_domain_loss=0.0, r_reg=0.0, gnn_weight_decay=0.0, weight_decay=0.0, gnn_type='gcn', gnn_num_layers=3, pretrained_path=['./pretrained/GCN_Pretrained_2024-07-01-14-54-05.pth', './pretrained/GCN_Pretrained_2024-07-01-14-56-23.pth', './pretrained/GCN_Pretrained_2024-07-01-14-58-41.pth', './pretrained/GCN_Pretrained_2024-07-01-15-00-59.pth', './pretrained/GCN_Pretrained_2024-07-01-15-03-17.pth', './pretrained/GCN_Pretrained_2024-07-01-15-05-37.pth', './pretrained/GCN_Pretrained_2024-07-01-15-07-56.pth', './pretrained/GCN_Pretrained_2024-07-01-15-10-20.pth', './pretrained/GCN_Pretrained_2024-07-01-15-12-47.pth', './pretrained/GCN_Pretrained_2024-07-01-15-15-13.pth'], gnn_n_epochs=100, gnn_eval_step=10, gnn_h_dim=512, gnn_lr=0.01, gnn_step_size=50, gnn_gamma=0.5, gnn_batch_size=64, gnn_dropout=0.4, n_epochs=50, eval_step=10, h_dim=512, lr=0.01, step_size=50, gamma=0.5, batch_size=64, num_tokens=20, src_ratio=0.5, dropout=0.3, cut_off=0.5, aug_type='feature', light_aug_prob=0.1, light_aug_mode='mask', pos_aug_mode='mask', neg_aug_mode='arbitrary', noise_cov_scale=1.0, noise_mean_shift=1.0, noise_shift_mode='homophily', noise_select_mode='soft', cross_prune=0.8, inner_prune=0.3, num_runs=5, p_raug=0.15, n_raug=0.15, s_split=[0.65, 0.3], t_split=[0.65, 0.3], seed=[1676, 3733, 3589, 4867, 2980, 1142, 3035, 4432, 4672, 4010], config_from_file='./config/dhfr.yaml', config_to_file='', label_reduction=0.0)
+2024-07-16,20:47:00 [INFO] ####################################################################################################
+2024-07-16,20:47:00 [INFO] Args seeds: [1676, 3733, 3589, 4867, 2980, 1142, 3035, 4432, 4672, 4010]
+2024-07-16,20:47:00 [INFO] Source Dataset: DHFR, Target Dataset: DHFR. Training, Test: Source: [0.65, 0.3], Target: [0.65, 0.3] -- Batch size: 64
+2024-07-16,20:47:00 [INFO] All input pretrained paths: ['./pretrained/GCN_Pretrained_2024-07-01-14-54-05.pth', './pretrained/GCN_Pretrained_2024-07-01-14-56-23.pth', './pretrained/GCN_Pretrained_2024-07-01-14-58-41.pth', './pretrained/GCN_Pretrained_2024-07-01-15-00-59.pth', './pretrained/GCN_Pretrained_2024-07-01-15-03-17.pth', './pretrained/GCN_Pretrained_2024-07-01-15-05-37.pth', './pretrained/GCN_Pretrained_2024-07-01-15-07-56.pth', './pretrained/GCN_Pretrained_2024-07-01-15-10-20.pth', './pretrained/GCN_Pretrained_2024-07-01-15-12-47.pth', './pretrained/GCN_Pretrained_2024-07-01-15-15-13.pth']
+2024-07-16,20:47:00 [INFO] Started round 0/10 of experiments!
+2024-07-16,20:47:00 [INFO] Setting for pretraining: Model: {'gnn_type': 'gcn', 'in_channels': 56, 'hidden_channels': 512, 'out_channels': 2, 'num_layers': 3, 'dropout': 0.4, 'with_bn': False, 'with_head': True} -- Optimizer: {'lr': 0.01, 'scheduler_step_size': 50, 'scheduler_gamma': 0.5, 'weight_decay': 0.0} -- Training: {'n_epochs': 100}
+2024-07-16,20:47:00 [INFO] Loading previous pretrained model at ./pretrained/GCN_Pretrained_2024-07-01-14-54-05.pth
+2024-07-16,20:47:00 [INFO] Prompting method: flex_match -- Setting: Prompting function: gpf_plus -- Target Dataset: DHFR
+2024-07-16,20:47:00 [INFO] Setting for prompt tuning: Prompt: {'emb_dim': 56, 'h_dim': 512, 'output_dim': 56, 'prompt_fn': 'gpf_plus', 'token_num': 20, 'cross_prune': 0.8, 'inner_prune': 0.3, 'attn_with_param': False} -- Pretrained Model: {'gnn_type': 'gcn', 'in_channels': 56, 'hidden_channels': 512, 'out_channels': 2, 'num_layers': 3, 'dropout': 0.4, 'with_bn': False, 'with_head': True} -- Optimizer: {'lr': 0.01, 'scheduler_step_size': 50, 'scheduler_gamma': 0.5, 'weight_decay': 0.0} -- Training: {'aug_type': 'feature', 'pos_aug_mode': 'mask', 'p_raug': 0.15, 'n_epochs': 50, 'r_reg': 0.0, 'soft_label': False, 'clutering_iters': 3, 'iterative_clustering': False, 'entropy_div_ratio': 3, 'w_entropy_loss': 0.0, 'w_softmax_loss': 0.0, 'w_domain_loss': 0.0, 'light_aug_prob': 0.1, 'light_aug_mode': 'mask', 'num_classes': 2, 'cut_off': 0.5}
+2024-07-16,20:47:00 [INFO] Prompt tuning started: Num runs: 5 -- Eval step: 10
+2024-07-16,20:47:01 [INFO] Pretrained GNN on Source Dataset -- Test Loss: 0.863 -- Test ACC: 0.661 -- Test F1-score: 0.702
+2024-07-16,20:47:01 [INFO] Pretrained GNN on Target Dataset Without Prompting: -- Validation Loss: 0.762 -- Validation ACC: 0.611 -- Validation F1-score: 0.667 -- Test Loss: 0.711 -- Test ACC: 0.774 -- Test F1-score: 0.803
+2024-07-16,20:47:02 [INFO] Epoch: 0/50 -- Train Loss: 0.182 -- Validation Loss: 1.572 -- Validation ACC: 0.444 -- Validation F1: 0.375
+2024-07-16,20:47:06 [INFO] Epoch: 10/50 -- Train Loss: 0.660 -- Validation Loss: 0.848 -- Validation ACC: 0.611 -- Validation F1: 0.667
+2024-07-16,20:47:11 [INFO] Epoch: 20/50 -- Train Loss: 0.098 -- Validation Loss: 0.909 -- Validation ACC: 0.556 -- Validation F1: 0.600
+2024-07-16,20:47:16 [INFO] Epoch: 30/50 -- Train Loss: 0.826 -- Validation Loss: 0.488 -- Validation ACC: 0.778 -- Validation F1: 0.857
+2024-07-16,20:47:25 [INFO] Epoch: 40/50 -- Train Loss: 0.002 -- Validation Loss: 0.854 -- Validation ACC: 0.556 -- Validation F1: 0.600
+2024-07-16,20:47:29 [INFO] Epoch: 44/50 -- Train Loss: 0.018 -- Validation Loss: 1.155 -- Validation ACC: 0.444 -- Validation F1: 0.375
+2024-07-16,20:47:31 [INFO] Epoch: 45/50 -- Train Loss: 0.372 -- Validation Loss: 1.272 -- Validation ACC: 0.444 -- Validation F1: 0.375
+2024-07-16,20:47:32 [INFO] Epoch: 46/50 -- Train Loss: 1.195 -- Validation Loss: 1.020 -- Validation ACC: 0.500 -- Validation F1: 0.526
+2024-07-16,20:47:33 [INFO] Epoch: 47/50 -- Train Loss: 0.247 -- Validation Loss: 0.840 -- Validation ACC: 0.556 -- Validation F1: 0.600
+2024-07-16,20:47:35 [INFO] Epoch: 48/50 -- Train Loss: 0.170 -- Validation Loss: 0.721 -- Validation ACC: 0.556 -- Validation F1: 0.600
+2024-07-16,20:47:37 [INFO] Epoch: 49/50 -- Train Loss: 0.031 -- Validation Loss: 0.674 -- Validation ACC: 0.556 -- Validation F1: 0.636
+2024-07-16,20:47:37 [INFO] Run 0/5: Average Over Last 6 epochs -- Valid ACC: 0.5092592592592592 -- Valid F1-score: 0.5187799135843912
+2024-07-16,20:47:37 [INFO] Test Results of Run 0/5: -- Test Loss: 0.682 -- Test ACC: 0.757 -- Test F1: 0.788
+2024-07-16,20:47:39 [INFO] Epoch: 0/50 -- Train Loss: 0.008 -- Validation Loss: 1.464 -- Validation ACC: 0.444 -- Validation F1: 0.375
+2024-07-16,20:47:53 [INFO] Epoch: 10/50 -- Train Loss: 0.237 -- Validation Loss: 1.046 -- Validation ACC: 0.389 -- Validation F1: 0.353
+2024-07-16,20:48:06 [INFO] Epoch: 20/50 -- Train Loss: 0.449 -- Validation Loss: 0.566 -- Validation ACC: 0.722 -- Validation F1: 0.800
+2024-07-16,20:48:21 [INFO] Epoch: 30/50 -- Train Loss: 1.739 -- Validation Loss: 0.838 -- Validation ACC: 0.556 -- Validation F1: 0.600
+2024-07-16,20:48:35 [INFO] Epoch: 40/50 -- Train Loss: 0.529 -- Validation Loss: 1.496 -- Validation ACC: 0.389 -- Validation F1: 0.267
+2024-07-16,20:48:41 [INFO] Epoch: 44/50 -- Train Loss: 0.121 -- Validation Loss: 1.215 -- Validation ACC: 0.389 -- Validation F1: 0.353
+2024-07-16,20:48:42 [INFO] Epoch: 45/50 -- Train Loss: 0.257 -- Validation Loss: 1.202 -- Validation ACC: 0.444 -- Validation F1: 0.444
+2024-07-16,20:48:44 [INFO] Epoch: 46/50 -- Train Loss: 0.038 -- Validation Loss: 1.277 -- Validation ACC: 0.444 -- Validation F1: 0.375
+2024-07-16,20:48:46 [INFO] Epoch: 47/50 -- Train Loss: 0.130 -- Validation Loss: 1.244 -- Validation ACC: 0.444 -- Validation F1: 0.375
+2024-07-16,20:48:47 [INFO] Epoch: 48/50 -- Train Loss: 0.272 -- Validation Loss: 1.242 -- Validation ACC: 0.444 -- Validation F1: 0.375
+2024-07-16,20:48:49 [INFO] Epoch: 49/50 -- Train Loss: 0.008 -- Validation Loss: 1.156 -- Validation ACC: 0.444 -- Validation F1: 0.444
+2024-07-16,20:48:49 [INFO] Run 1/5: Average Over Last 6 epochs -- Valid ACC: 0.4351851851851851 -- Valid F1-score: 0.3944716801246007
+2024-07-16,20:48:50 [INFO] Test Results of Run 1/5: -- Test Loss: 0.896 -- Test ACC: 0.739 -- Test F1: 0.746
+2024-07-16,20:48:52 [INFO] Epoch: 0/50 -- Train Loss: 0.478 -- Validation Loss: 0.760 -- Validation ACC: 0.611 -- Validation F1: 0.667
+2024-07-16,20:49:05 [INFO] Epoch: 10/50 -- Train Loss: 0.662 -- Validation Loss: 0.534 -- Validation ACC: 0.611 -- Validation F1: 0.696
+2024-07-16,20:49:19 [INFO] Epoch: 20/50 -- Train Loss: 0.009 -- Validation Loss: 0.850 -- Validation ACC: 0.500 -- Validation F1: 0.526
+2024-07-16,20:49:34 [INFO] Epoch: 30/50 -- Train Loss: 1.601 -- Validation Loss: 0.773 -- Validation ACC: 0.667 -- Validation F1: 0.727
+2024-07-16,20:49:48 [INFO] Epoch: 40/50 -- Train Loss: 0.122 -- Validation Loss: 0.558 -- Validation ACC: 0.778 -- Validation F1: 0.833
+2024-07-16,20:49:53 [INFO] Epoch: 44/50 -- Train Loss: 0.174 -- Validation Loss: 0.542 -- Validation ACC: 0.778 -- Validation F1: 0.833
+2024-07-16,20:49:55 [INFO] Epoch: 45/50 -- Train Loss: 0.239 -- Validation Loss: 0.608 -- Validation ACC: 0.722 -- Validation F1: 0.783
+2024-07-16,20:49:57 [INFO] Epoch: 46/50 -- Train Loss: 0.002 -- Validation Loss: 0.629 -- Validation ACC: 0.722 -- Validation F1: 0.783
+2024-07-16,20:49:58 [INFO] Epoch: 47/50 -- Train Loss: 0.208 -- Validation Loss: 0.642 -- Validation ACC: 0.722 -- Validation F1: 0.783
+2024-07-16,20:50:00 [INFO] Epoch: 48/50 -- Train Loss: 0.448 -- Validation Loss: 0.604 -- Validation ACC: 0.722 -- Validation F1: 0.783
+2024-07-16,20:50:02 [INFO] Epoch: 49/50 -- Train Loss: 0.451 -- Validation Loss: 0.515 -- Validation ACC: 0.778 -- Validation F1: 0.833
+2024-07-16,20:50:02 [INFO] Run 2/5: Average Over Last 6 epochs -- Valid ACC: 0.7407407407407408 -- Valid F1-score: 0.7995168964068095
+2024-07-16,20:50:03 [INFO] Test Results of Run 2/5: -- Test Loss: 0.599 -- Test ACC: 0.791 -- Test F1: 0.833
+2024-07-16,20:50:04 [INFO] Epoch: 0/50 -- Train Loss: 0.529 -- Validation Loss: 0.648 -- Validation ACC: 0.556 -- Validation F1: 0.600
+2024-07-16,20:50:18 [INFO] Epoch: 10/50 -- Train Loss: 1.235 -- Validation Loss: 2.695 -- Validation ACC: 0.389 -- Validation F1: 0.267
+2024-07-16,20:50:32 [INFO] Epoch: 20/50 -- Train Loss: 0.048 -- Validation Loss: 0.493 -- Validation ACC: 0.833 -- Validation F1: 0.889
+2024-07-16,20:50:46 [INFO] Epoch: 30/50 -- Train Loss: 0.005 -- Validation Loss: 0.560 -- Validation ACC: 0.556 -- Validation F1: 0.636
+2024-07-16,20:51:01 [INFO] Epoch: 40/50 -- Train Loss: 1.655 -- Validation Loss: 1.835 -- Validation ACC: 0.444 -- Validation F1: 0.375
+2024-07-16,20:51:07 [INFO] Epoch: 44/50 -- Train Loss: 0.105 -- Validation Loss: 0.819 -- Validation ACC: 0.500 -- Validation F1: 0.571
+2024-07-16,20:51:09 [INFO] Epoch: 45/50 -- Train Loss: 0.798 -- Validation Loss: 0.825 -- Validation ACC: 0.500 -- Validation F1: 0.571
+2024-07-16,20:51:10 [INFO] Epoch: 46/50 -- Train Loss: 0.198 -- Validation Loss: 0.897 -- Validation ACC: 0.500 -- Validation F1: 0.571
+2024-07-16,20:51:12 [INFO] Epoch: 47/50 -- Train Loss: 0.007 -- Validation Loss: 0.848 -- Validation ACC: 0.500 -- Validation F1: 0.571
+2024-07-16,20:51:14 [INFO] Epoch: 48/50 -- Train Loss: 1.241 -- Validation Loss: 0.793 -- Validation ACC: 0.556 -- Validation F1: 0.636
+2024-07-16,20:51:16 [INFO] Epoch: 49/50 -- Train Loss: 0.063 -- Validation Loss: 0.899 -- Validation ACC: 0.500 -- Validation F1: 0.571
+2024-07-16,20:51:16 [INFO] Run 3/5: Average Over Last 6 epochs -- Valid ACC: 0.5092592592592592 -- Valid F1-score: 0.582251101732254
+2024-07-16,20:51:17 [INFO] Test Results of Run 3/5: -- Test Loss: 0.679 -- Test ACC: 0.765 -- Test F1: 0.794
+2024-07-16,20:51:18 [INFO] Epoch: 0/50 -- Train Loss: 0.347 -- Validation Loss: 0.946 -- Validation ACC: 0.500 -- Validation F1: 0.526
+2024-07-16,20:51:32 [INFO] Epoch: 10/50 -- Train Loss: 0.888 -- Validation Loss: 0.520 -- Validation ACC: 0.722 -- Validation F1: 0.783
+2024-07-16,20:51:45 [INFO] Epoch: 20/50 -- Train Loss: 0.054 -- Validation Loss: 0.856 -- Validation ACC: 0.500 -- Validation F1: 0.571
+2024-07-16,20:52:00 [INFO] Epoch: 30/50 -- Train Loss: 0.168 -- Validation Loss: 0.589 -- Validation ACC: 0.667 -- Validation F1: 0.750
+2024-07-16,20:52:15 [INFO] Epoch: 40/50 -- Train Loss: 0.015 -- Validation Loss: 1.145 -- Validation ACC: 0.389 -- Validation F1: 0.353
+2024-07-16,20:52:21 [INFO] Epoch: 44/50 -- Train Loss: 0.030 -- Validation Loss: 0.640 -- Validation ACC: 0.778 -- Validation F1: 0.857
+2024-07-16,20:52:22 [INFO] Epoch: 45/50 -- Train Loss: 0.010 -- Validation Loss: 0.645 -- Validation ACC: 0.778 -- Validation F1: 0.857
+2024-07-16,20:52:24 [INFO] Epoch: 46/50 -- Train Loss: 2.376 -- Validation Loss: 0.633 -- Validation ACC: 0.778 -- Validation F1: 0.857
+2024-07-16,20:52:26 [INFO] Epoch: 47/50 -- Train Loss: 2.600 -- Validation Loss: 0.601 -- Validation ACC: 0.833 -- Validation F1: 0.889
+2024-07-16,20:52:28 [INFO] Epoch: 48/50 -- Train Loss: 0.421 -- Validation Loss: 0.585 -- Validation ACC: 0.778 -- Validation F1: 0.846
+2024-07-16,20:52:30 [INFO] Epoch: 49/50 -- Train Loss: 0.150 -- Validation Loss: 0.612 -- Validation ACC: 0.722 -- Validation F1: 0.800
+2024-07-16,20:52:30 [INFO] Run 4/5: Average Over Last 6 epochs -- Valid ACC: 0.7777777777777778 -- Valid F1-score: 0.8510785599549612
+2024-07-16,20:52:30 [INFO] Test Results of Run 4/5: -- Test Loss: 0.528 -- Test ACC: 0.739 -- Test F1: 0.795
+2024-07-16,20:52:30 [INFO] Validation average after 5 runs -- ACC: 0.594 -- F1-score: 0.629
+2024-07-16,20:52:30 [INFO] Test average after 5 runs -- ACC: 0.758 -- F1-score: 0.791
+2024-07-16,20:52:30 [INFO] Finished round 0/10 of experiments!
+2024-07-16,20:52:30 [INFO] Started round 1/10 of experiments!
+2024-07-16,20:52:31 [INFO] Loading previous pretrained model at ./pretrained/GCN_Pretrained_2024-07-01-14-56-23.pth
+2024-07-16,20:52:32 [INFO] Pretrained GNN on Source Dataset -- Test Loss: 0.964 -- Test ACC: 0.739 -- Test F1-score: 0.758
+2024-07-16,20:52:33 [INFO] Pretrained GNN on Target Dataset Without Prompting: -- Validation Loss: 1.277 -- Validation ACC: 0.667 -- Validation F1-score: 0.769 -- Test Loss: 1.529 -- Test ACC: 0.643 -- Test F1-score: 0.713
+2024-07-16,20:52:34 [INFO] Epoch: 0/50 -- Train Loss: 1.191 -- Validation Loss: 1.475 -- Validation ACC: 0.667 -- Validation F1: 0.800
+2024-07-16,20:52:48 [INFO] Epoch: 10/50 -- Train Loss: 0.004 -- Validation Loss: 1.285 -- Validation ACC: 0.667 -- Validation F1: 0.786
+2024-07-16,20:53:01 [INFO] Epoch: 20/50 -- Train Loss: 0.014 -- Validation Loss: 1.576 -- Validation ACC: 0.722 -- Validation F1: 0.839
+2024-07-16,20:53:15 [INFO] Epoch: 30/50 -- Train Loss: 0.801 -- Validation Loss: 1.308 -- Validation ACC: 0.722 -- Validation F1: 0.828
+2024-07-16,20:53:30 [INFO] Epoch: 40/50 -- Train Loss: 0.010 -- Validation Loss: 1.334 -- Validation ACC: 0.667 -- Validation F1: 0.786
+2024-07-16,20:53:36 [INFO] Epoch: 44/50 -- Train Loss: 0.204 -- Validation Loss: 1.319 -- Validation ACC: 0.667 -- Validation F1: 0.800
+2024-07-16,20:53:38 [INFO] Epoch: 45/50 -- Train Loss: 0.008 -- Validation Loss: 1.312 -- Validation ACC: 0.667 -- Validation F1: 0.800
+2024-07-16,20:53:40 [INFO] Epoch: 46/50 -- Train Loss: 0.308 -- Validation Loss: 1.321 -- Validation ACC: 0.722 -- Validation F1: 0.839
+2024-07-16,20:53:41 [INFO] Epoch: 47/50 -- Train Loss: 0.278 -- Validation Loss: 1.319 -- Validation ACC: 0.722 -- Validation F1: 0.839
+2024-07-16,20:53:44 [INFO] Epoch: 48/50 -- Train Loss: 0.146 -- Validation Loss: 1.335 -- Validation ACC: 0.722 -- Validation F1: 0.839
+2024-07-16,20:53:46 [INFO] Epoch: 49/50 -- Train Loss: 0.000 -- Validation Loss: 1.345 -- Validation ACC: 0.722 -- Validation F1: 0.839
+2024-07-16,20:53:46 [INFO] Run 0/5: Average Over Last 6 epochs -- Valid ACC: 0.7037037037037037 -- Valid F1-score: 0.8258064389228821
+2024-07-16,20:53:46 [INFO] Test Results of Run 0/5: -- Test Loss: 1.691 -- Test ACC: 0.670 -- Test F1: 0.759
+2024-07-16,20:53:48 [INFO] Epoch: 0/50 -- Train Loss: 0.349 -- Validation Loss: 1.262 -- Validation ACC: 0.667 -- Validation F1: 0.769
+2024-07-16,20:54:01 [INFO] Epoch: 10/50 -- Train Loss: 0.054 -- Validation Loss: 1.328 -- Validation ACC: 0.667 -- Validation F1: 0.786
+2024-07-16,20:54:15 [INFO] Epoch: 20/50 -- Train Loss: 0.099 -- Validation Loss: 1.847 -- Validation ACC: 0.722 -- Validation F1: 0.839
+2024-07-16,20:54:29 [INFO] Epoch: 30/50 -- Train Loss: 0.066 -- Validation Loss: 1.403 -- Validation ACC: 0.722 -- Validation F1: 0.815
+2024-07-16,20:54:43 [INFO] Epoch: 40/50 -- Train Loss: 0.058 -- Validation Loss: 1.401 -- Validation ACC: 0.667 -- Validation F1: 0.769
+2024-07-16,20:54:49 [INFO] Epoch: 44/50 -- Train Loss: 0.016 -- Validation Loss: 1.388 -- Validation ACC: 0.667 -- Validation F1: 0.769
+2024-07-16,20:54:51 [INFO] Epoch: 45/50 -- Train Loss: 0.668 -- Validation Loss: 1.403 -- Validation ACC: 0.722 -- Validation F1: 0.815
+2024-07-16,20:54:53 [INFO] Epoch: 46/50 -- Train Loss: 0.044 -- Validation Loss: 1.451 -- Validation ACC: 0.667 -- Validation F1: 0.786
+2024-07-16,20:54:55 [INFO] Epoch: 47/50 -- Train Loss: 0.284 -- Validation Loss: 1.540 -- Validation ACC: 0.722 -- Validation F1: 0.839
+2024-07-16,20:54:57 [INFO] Epoch: 48/50 -- Train Loss: 0.088 -- Validation Loss: 1.665 -- Validation ACC: 0.722 -- Validation F1: 0.839
+2024-07-16,20:54:58 [INFO] Epoch: 49/50 -- Train Loss: 0.007 -- Validation Loss: 1.745 -- Validation ACC: 0.722 -- Validation F1: 0.839
+2024-07-16,20:54:58 [INFO] Run 1/5: Average Over Last 6 epochs -- Valid ACC: 0.7037037037037037 -- Valid F1-score: 0.8143148024876913
+2024-07-16,20:54:59 [INFO] Test Results of Run 1/5: -- Test Loss: 1.924 -- Test ACC: 0.687 -- Test F1: 0.788
+2024-07-16,20:55:01 [INFO] Epoch: 0/50 -- Train Loss: 0.001 -- Validation Loss: 1.278 -- Validation ACC: 0.667 -- Validation F1: 0.769
+2024-07-16,20:55:13 [INFO] Epoch: 10/50 -- Train Loss: 0.778 -- Validation Loss: 1.669 -- Validation ACC: 0.722 -- Validation F1: 0.839
+2024-07-16,20:55:27 [INFO] Epoch: 20/50 -- Train Loss: 0.697 -- Validation Loss: 1.267 -- Validation ACC: 0.667 -- Validation F1: 0.786
+2024-07-16,20:55:41 [INFO] Epoch: 30/50 -- Train Loss: 0.146 -- Validation Loss: 1.147 -- Validation ACC: 0.667 -- Validation F1: 0.769
+2024-07-16,20:55:55 [INFO] Epoch: 40/50 -- Train Loss: 1.730 -- Validation Loss: 1.273 -- Validation ACC: 0.667 -- Validation F1: 0.769
+2024-07-16,20:56:01 [INFO] Epoch: 44/50 -- Train Loss: 0.504 -- Validation Loss: 1.493 -- Validation ACC: 0.667 -- Validation F1: 0.800
+2024-07-16,20:56:03 [INFO] Epoch: 45/50 -- Train Loss: 0.656 -- Validation Loss: 1.556 -- Validation ACC: 0.667 -- Validation F1: 0.800
+2024-07-16,20:56:05 [INFO] Epoch: 46/50 -- Train Loss: 0.006 -- Validation Loss: 1.493 -- Validation ACC: 0.667 -- Validation F1: 0.800
+2024-07-16,20:56:07 [INFO] Epoch: 47/50 -- Train Loss: 0.013 -- Validation Loss: 1.403 -- Validation ACC: 0.667 -- Validation F1: 0.800
+2024-07-16,20:56:09 [INFO] Epoch: 48/50 -- Train Loss: 0.050 -- Validation Loss: 1.328 -- Validation ACC: 0.611 -- Validation F1: 0.759
+2024-07-16,20:56:10 [INFO] Epoch: 49/50 -- Train Loss: 1.082 -- Validation Loss: 1.302 -- Validation ACC: 0.611 -- Validation F1: 0.759
+2024-07-16,20:56:10 [INFO] Run 2/5: Average Over Last 6 epochs -- Valid ACC: 0.6481481481481481 -- Valid F1-score: 0.7862069010734558
+2024-07-16,20:56:11 [INFO] Test Results of Run 2/5: -- Test Loss: 1.620 -- Test ACC: 0.670 -- Test F1: 0.740
+2024-07-16,20:56:13 [INFO] Epoch: 0/50 -- Train Loss: 0.152 -- Validation Loss: 1.615 -- Validation ACC: 0.722 -- Validation F1: 0.828
+2024-07-16,20:56:27 [INFO] Epoch: 10/50 -- Train Loss: 0.083 -- Validation Loss: 1.531 -- Validation ACC: 0.667 -- Validation F1: 0.786
+2024-07-16,20:56:41 [INFO] Epoch: 20/50 -- Train Loss: 0.412 -- Validation Loss: 1.355 -- Validation ACC: 0.778 -- Validation F1: 0.857
+2024-07-16,20:56:55 [INFO] Epoch: 30/50 -- Train Loss: 0.894 -- Validation Loss: 1.588 -- Validation ACC: 0.667 -- Validation F1: 0.769
+2024-07-16,20:57:09 [INFO] Epoch: 40/50 -- Train Loss: 0.322 -- Validation Loss: 1.478 -- Validation ACC: 0.722 -- Validation F1: 0.839
+2024-07-16,20:57:15 [INFO] Epoch: 44/50 -- Train Loss: 0.139 -- Validation Loss: 1.339 -- Validation ACC: 0.722 -- Validation F1: 0.828
+2024-07-16,20:57:18 [INFO] Epoch: 45/50 -- Train Loss: 0.063 -- Validation Loss: 1.300 -- Validation ACC: 0.722 -- Validation F1: 0.815
+2024-07-16,20:57:20 [INFO] Epoch: 46/50 -- Train Loss: 0.029 -- Validation Loss: 1.299 -- Validation ACC: 0.722 -- Validation F1: 0.815
+2024-07-16,20:57:21 [INFO] Epoch: 47/50 -- Train Loss: 1.009 -- Validation Loss: 1.289 -- Validation ACC: 0.667 -- Validation F1: 0.769
+2024-07-16,20:57:23 [INFO] Epoch: 48/50 -- Train Loss: 0.046 -- Validation Loss: 1.292 -- Validation ACC: 0.667 -- Validation F1: 0.769
+2024-07-16,20:57:25 [INFO] Epoch: 49/50 -- Train Loss: 1.754 -- Validation Loss: 1.298 -- Validation ACC: 0.667 -- Validation F1: 0.769
+2024-07-16,20:57:25 [INFO] Run 3/5: Average Over Last 6 epochs -- Valid ACC: 0.6944444444444443 -- Valid F1-score: 0.7941513657569885
+2024-07-16,20:57:25 [INFO] Test Results of Run 3/5: -- Test Loss: 1.667 -- Test ACC: 0.626 -- Test F1: 0.681
+2024-07-16,20:57:27 [INFO] Epoch: 0/50 -- Train Loss: 0.010 -- Validation Loss: 1.441 -- Validation ACC: 0.667 -- Validation F1: 0.769
+2024-07-16,20:57:41 [INFO] Epoch: 10/50 -- Train Loss: 0.079 -- Validation Loss: 1.582 -- Validation ACC: 0.722 -- Validation F1: 0.828
+2024-07-16,20:57:55 [INFO] Epoch: 20/50 -- Train Loss: 0.865 -- Validation Loss: 1.538 -- Validation ACC: 0.778 -- Validation F1: 0.857
+2024-07-16,20:58:08 [INFO] Epoch: 30/50 -- Train Loss: 0.237 -- Validation Loss: 1.373 -- Validation ACC: 0.722 -- Validation F1: 0.815
+2024-07-16,20:58:22 [INFO] Epoch: 40/50 -- Train Loss: 0.177 -- Validation Loss: 1.220 -- Validation ACC: 0.667 -- Validation F1: 0.769
+2024-07-16,20:58:28 [INFO] Epoch: 44/50 -- Train Loss: 0.569 -- Validation Loss: 1.199 -- Validation ACC: 0.667 -- Validation F1: 0.769
+2024-07-16,20:58:30 [INFO] Epoch: 45/50 -- Train Loss: 0.001 -- Validation Loss: 1.194 -- Validation ACC: 0.667 -- Validation F1: 0.769
+2024-07-16,20:58:32 [INFO] Epoch: 46/50 -- Train Loss: 0.031 -- Validation Loss: 1.196 -- Validation ACC: 0.722 -- Validation F1: 0.815
+2024-07-16,20:58:34 [INFO] Epoch: 47/50 -- Train Loss: 0.599 -- Validation Loss: 1.212 -- Validation ACC: 0.722 -- Validation F1: 0.815
+2024-07-16,20:58:36 [INFO] Epoch: 48/50 -- Train Loss: 0.613 -- Validation Loss: 1.255 -- Validation ACC: 0.778 -- Validation F1: 0.857
+2024-07-16,20:58:38 [INFO] Epoch: 49/50 -- Train Loss: 0.598 -- Validation Loss: 1.268 -- Validation ACC: 0.722 -- Validation F1: 0.828
+2024-07-16,20:58:38 [INFO] Run 4/5: Average Over Last 6 epochs -- Valid ACC: 0.7129629629629629 -- Valid F1-score: 0.808803379535675
+2024-07-16,20:58:38 [INFO] Test Results of Run 4/5: -- Test Loss: 1.736 -- Test ACC: 0.696 -- Test F1: 0.780
+2024-07-16,20:58:38 [INFO] Validation average after 5 runs -- ACC: 0.693 -- F1-score: 0.806
+2024-07-16,20:58:38 [INFO] Test average after 5 runs -- ACC: 0.670 -- F1-score: 0.750
+2024-07-16,20:58:38 [INFO] Finished round 1/10 of experiments!
+2024-07-16,20:58:38 [INFO] Started round 2/10 of experiments!
+2024-07-16,20:58:39 [INFO] Loading previous pretrained model at ./pretrained/GCN_Pretrained_2024-07-01-14-58-41.pth
+2024-07-16,20:58:40 [INFO] Pretrained GNN on Source Dataset -- Test Loss: 1.173 -- Test ACC: 0.757 -- Test F1-score: 0.813
+2024-07-16,20:58:40 [INFO] Pretrained GNN on Target Dataset Without Prompting: -- Validation Loss: 0.928 -- Validation ACC: 0.667 -- Validation F1-score: 0.769 -- Test Loss: 0.858 -- Test ACC: 0.687 -- Test F1-score: 0.735
+2024-07-16,20:58:42 [INFO] Epoch: 0/50 -- Train Loss: 0.473 -- Validation Loss: 0.907 -- Validation ACC: 0.667 -- Validation F1: 0.769
+2024-07-16,20:58:56 [INFO] Epoch: 10/50 -- Train Loss: 1.330 -- Validation Loss: 1.009 -- Validation ACC: 0.667 -- Validation F1: 0.769
+2024-07-16,20:59:10 [INFO] Epoch: 20/50 -- Train Loss: 0.212 -- Validation Loss: 1.170 -- Validation ACC: 0.667 -- Validation F1: 0.769
+2024-07-16,20:59:24 [INFO] Epoch: 30/50 -- Train Loss: 0.504 -- Validation Loss: 0.991 -- Validation ACC: 0.667 -- Validation F1: 0.769
+2024-07-16,20:59:39 [INFO] Epoch: 40/50 -- Train Loss: 0.030 -- Validation Loss: 1.203 -- Validation ACC: 0.611 -- Validation F1: 0.741
+2024-07-16,20:59:45 [INFO] Epoch: 44/50 -- Train Loss: 0.001 -- Validation Loss: 1.209 -- Validation ACC: 0.611 -- Validation F1: 0.741
+2024-07-16,20:59:47 [INFO] Epoch: 45/50 -- Train Loss: 2.018 -- Validation Loss: 1.263 -- Validation ACC: 0.611 -- Validation F1: 0.741
+2024-07-16,20:59:49 [INFO] Epoch: 46/50 -- Train Loss: 0.013 -- Validation Loss: 1.292 -- Validation ACC: 0.611 -- Validation F1: 0.741
+2024-07-16,20:59:50 [INFO] Epoch: 47/50 -- Train Loss: 0.875 -- Validation Loss: 1.344 -- Validation ACC: 0.667 -- Validation F1: 0.786
+2024-07-16,20:59:52 [INFO] Epoch: 48/50 -- Train Loss: 1.062 -- Validation Loss: 1.343 -- Validation ACC: 0.722 -- Validation F1: 0.828
+2024-07-16,20:59:54 [INFO] Epoch: 49/50 -- Train Loss: 0.094 -- Validation Loss: 1.294 -- Validation ACC: 0.667 -- Validation F1: 0.786
+2024-07-16,20:59:54 [INFO] Run 0/5: Average Over Last 6 epochs -- Valid ACC: 0.6481481481481481 -- Valid F1-score: 0.7702061533927917
+2024-07-16,20:59:55 [INFO] Test Results of Run 0/5: -- Test Loss: 1.333 -- Test ACC: 0.643 -- Test F1: 0.725
+2024-07-16,20:59:56 [INFO] Epoch: 0/50 -- Train Loss: 0.219 -- Validation Loss: 1.184 -- Validation ACC: 0.667 -- Validation F1: 0.786
+2024-07-16,21:00:10 [INFO] Epoch: 10/50 -- Train Loss: 0.637 -- Validation Loss: 0.938 -- Validation ACC: 0.611 -- Validation F1: 0.720
+2024-07-16,21:00:25 [INFO] Epoch: 20/50 -- Train Loss: 0.138 -- Validation Loss: 1.288 -- Validation ACC: 0.667 -- Validation F1: 0.786
+2024-07-16,21:00:40 [INFO] Epoch: 30/50 -- Train Loss: 0.146 -- Validation Loss: 1.210 -- Validation ACC: 0.611 -- Validation F1: 0.741
+2024-07-16,21:00:54 [INFO] Epoch: 40/50 -- Train Loss: 0.000 -- Validation Loss: 1.203 -- Validation ACC: 0.611 -- Validation F1: 0.741
+2024-07-16,21:00:59 [INFO] Epoch: 44/50 -- Train Loss: 0.153 -- Validation Loss: 1.071 -- Validation ACC: 0.556 -- Validation F1: 0.692
+2024-07-16,21:01:01 [INFO] Epoch: 45/50 -- Train Loss: 0.505 -- Validation Loss: 1.097 -- Validation ACC: 0.611 -- Validation F1: 0.741
+2024-07-16,21:01:03 [INFO] Epoch: 46/50 -- Train Loss: 0.374 -- Validation Loss: 1.125 -- Validation ACC: 0.611 -- Validation F1: 0.741
+2024-07-16,21:01:04 [INFO] Epoch: 47/50 -- Train Loss: 0.438 -- Validation Loss: 1.105 -- Validation ACC: 0.611 -- Validation F1: 0.741
+2024-07-16,21:01:06 [INFO] Epoch: 48/50 -- Train Loss: 0.332 -- Validation Loss: 1.039 -- Validation ACC: 0.611 -- Validation F1: 0.741
+2024-07-16,21:01:08 [INFO] Epoch: 49/50 -- Train Loss: 0.478 -- Validation Loss: 0.974 -- Validation ACC: 0.667 -- Validation F1: 0.769
+2024-07-16,21:01:08 [INFO] Run 1/5: Average Over Last 6 epochs -- Valid ACC: 0.6111111111111112 -- Valid F1-score: 0.7374168932437897
+2024-07-16,21:01:09 [INFO] Test Results of Run 1/5: -- Test Loss: 0.866 -- Test ACC: 0.713 -- Test F1: 0.732
+2024-07-16,21:01:10 [INFO] Epoch: 0/50 -- Train Loss: 0.189 -- Validation Loss: 0.960 -- Validation ACC: 0.611 -- Validation F1: 0.720
+2024-07-16,21:01:25 [INFO] Epoch: 10/50 -- Train Loss: 0.013 -- Validation Loss: 1.098 -- Validation ACC: 0.667 -- Validation F1: 0.769
+2024-07-16,21:01:39 [INFO] Epoch: 20/50 -- Train Loss: 0.663 -- Validation Loss: 1.104 -- Validation ACC: 0.611 -- Validation F1: 0.741
+2024-07-16,21:01:53 [INFO] Epoch: 30/50 -- Train Loss: 0.810 -- Validation Loss: 0.897 -- Validation ACC: 0.667 -- Validation F1: 0.769
+2024-07-16,21:02:07 [INFO] Epoch: 40/50 -- Train Loss: 0.217 -- Validation Loss: 0.980 -- Validation ACC: 0.667 -- Validation F1: 0.769
+2024-07-16,21:02:14 [INFO] Epoch: 44/50 -- Train Loss: 0.033 -- Validation Loss: 0.943 -- Validation ACC: 0.667 -- Validation F1: 0.769
+2024-07-16,21:02:16 [INFO] Epoch: 45/50 -- Train Loss: 0.464 -- Validation Loss: 0.975 -- Validation ACC: 0.667 -- Validation F1: 0.769
+2024-07-16,21:02:18 [INFO] Epoch: 46/50 -- Train Loss: 0.621 -- Validation Loss: 1.024 -- Validation ACC: 0.667 -- Validation F1: 0.769
+2024-07-16,21:02:19 [INFO] Epoch: 47/50 -- Train Loss: 0.883 -- Validation Loss: 1.074 -- Validation ACC: 0.667 -- Validation F1: 0.769
+2024-07-16,21:02:21 [INFO] Epoch: 48/50 -- Train Loss: 0.007 -- Validation Loss: 1.075 -- Validation ACC: 0.667 -- Validation F1: 0.769
+2024-07-16,21:02:23 [INFO] Epoch: 49/50 -- Train Loss: 0.007 -- Validation Loss: 1.098 -- Validation ACC: 0.667 -- Validation F1: 0.769
+2024-07-16,21:02:23 [INFO] Run 2/5: Average Over Last 6 epochs -- Valid ACC: 0.6666666666666666 -- Valid F1-score: 0.7692307829856873
+2024-07-16,21:02:23 [INFO] Test Results of Run 2/5: -- Test Loss: 1.016 -- Test ACC: 0.696 -- Test F1: 0.748
+2024-07-16,21:02:25 [INFO] Epoch: 0/50 -- Train Loss: 0.649 -- Validation Loss: 1.021 -- Validation ACC: 0.667 -- Validation F1: 0.769
+2024-07-16,21:02:39 [INFO] Epoch: 10/50 -- Train Loss: 0.127 -- Validation Loss: 0.904 -- Validation ACC: 0.611 -- Validation F1: 0.720
+2024-07-16,21:02:54 [INFO] Epoch: 20/50 -- Train Loss: 0.036 -- Validation Loss: 1.136 -- Validation ACC: 0.667 -- Validation F1: 0.769
+2024-07-16,21:03:09 [INFO] Epoch: 30/50 -- Train Loss: 0.095 -- Validation Loss: 1.001 -- Validation ACC: 0.667 -- Validation F1: 0.750
+2024-07-16,21:03:23 [INFO] Epoch: 40/50 -- Train Loss: 0.069 -- Validation Loss: 1.265 -- Validation ACC: 0.667 -- Validation F1: 0.786
+2024-07-16,21:03:30 [INFO] Epoch: 44/50 -- Train Loss: 0.242 -- Validation Loss: 1.464 -- Validation ACC: 0.722 -- Validation F1: 0.839
+2024-07-16,21:03:31 [INFO] Epoch: 45/50 -- Train Loss: 0.003 -- Validation Loss: 1.440 -- Validation ACC: 0.778 -- Validation F1: 0.867
+2024-07-16,21:03:33 [INFO] Epoch: 46/50 -- Train Loss: 0.724 -- Validation Loss: 1.449 -- Validation ACC: 0.778 -- Validation F1: 0.867
+2024-07-16,21:03:35 [INFO] Epoch: 47/50 -- Train Loss: 0.018 -- Validation Loss: 1.286 -- Validation ACC: 0.611 -- Validation F1: 0.741
+2024-07-16,21:03:36 [INFO] Epoch: 48/50 -- Train Loss: 0.054 -- Validation Loss: 1.235 -- Validation ACC: 0.611 -- Validation F1: 0.741
+2024-07-16,21:03:38 [INFO] Epoch: 49/50 -- Train Loss: 0.031 -- Validation Loss: 1.195 -- Validation ACC: 0.667 -- Validation F1: 0.769
+2024-07-16,21:03:38 [INFO] Run 3/5: Average Over Last 6 epochs -- Valid ACC: 0.6944444444444445 -- Valid F1-score: 0.8037925362586975
+2024-07-16,21:03:39 [INFO] Test Results of Run 3/5: -- Test Loss: 1.055 -- Test ACC: 0.687 -- Test F1: 0.735
+2024-07-16,21:03:41 [INFO] Epoch: 0/50 -- Train Loss: 0.343 -- Validation Loss: 1.095 -- Validation ACC: 0.667 -- Validation F1: 0.769
+2024-07-16,21:03:54 [INFO] Epoch: 10/50 -- Train Loss: 0.208 -- Validation Loss: 1.017 -- Validation ACC: 0.667 -- Validation F1: 0.769
+2024-07-16,21:04:09 [INFO] Epoch: 20/50 -- Train Loss: 0.147 -- Validation Loss: 1.132 -- Validation ACC: 0.667 -- Validation F1: 0.769
+2024-07-16,21:04:24 [INFO] Epoch: 30/50 -- Train Loss: 0.615 -- Validation Loss: 1.192 -- Validation ACC: 0.667 -- Validation F1: 0.769
+2024-07-16,21:04:39 [INFO] Epoch: 40/50 -- Train Loss: 0.137 -- Validation Loss: 1.055 -- Validation ACC: 0.611 -- Validation F1: 0.720
+2024-07-16,21:04:44 [INFO] Epoch: 44/50 -- Train Loss: 0.774 -- Validation Loss: 1.087 -- Validation ACC: 0.667 -- Validation F1: 0.769
+2024-07-16,21:04:46 [INFO] Epoch: 45/50 -- Train Loss: 0.225 -- Validation Loss: 1.102 -- Validation ACC: 0.667 -- Validation F1: 0.769
+2024-07-16,21:04:48 [INFO] Epoch: 46/50 -- Train Loss: 0.252 -- Validation Loss: 1.085 -- Validation ACC: 0.667 -- Validation F1: 0.769
+2024-07-16,21:04:50 [INFO] Epoch: 47/50 -- Train Loss: 0.108 -- Validation Loss: 1.087 -- Validation ACC: 0.667 -- Validation F1: 0.769
+2024-07-16,21:04:52 [INFO] Epoch: 48/50 -- Train Loss: 0.403 -- Validation Loss: 1.078 -- Validation ACC: 0.667 -- Validation F1: 0.769
+2024-07-16,21:04:54 [INFO] Epoch: 49/50 -- Train Loss: 0.357 -- Validation Loss: 1.099 -- Validation ACC: 0.667 -- Validation F1: 0.769
+2024-07-16,21:04:54 [INFO] Run 4/5: Average Over Last 6 epochs -- Valid ACC: 0.6666666666666666 -- Valid F1-score: 0.7692307829856873
+2024-07-16,21:04:54 [INFO] Test Results of Run 4/5: -- Test Loss: 0.902 -- Test ACC: 0.722 -- Test F1: 0.765
+2024-07-16,21:04:54 [INFO] Validation average after 5 runs -- ACC: 0.657 -- F1-score: 0.770
+2024-07-16,21:04:54 [INFO] Test average after 5 runs -- ACC: 0.692 -- F1-score: 0.741
+2024-07-16,21:04:54 [INFO] Finished round 2/10 of experiments!
+2024-07-16,21:04:54 [INFO] Started round 3/10 of experiments!
+2024-07-16,21:04:55 [INFO] Loading previous pretrained model at ./pretrained/GCN_Pretrained_2024-07-01-15-00-59.pth
+2024-07-16,21:04:56 [INFO] Pretrained GNN on Source Dataset -- Test Loss: 0.746 -- Test ACC: 0.739 -- Test F1-score: 0.786
+2024-07-16,21:04:56 [INFO] Pretrained GNN on Target Dataset Without Prompting: -- Validation Loss: 0.769 -- Validation ACC: 0.722 -- Validation F1-score: 0.706 -- Test Loss: 0.897 -- Test ACC: 0.748 -- Test F1-score: 0.810
+2024-07-16,21:04:58 [INFO] Epoch: 0/50 -- Train Loss: 0.018 -- Validation Loss: 1.173 -- Validation ACC: 0.667 -- Validation F1: 0.700
+2024-07-16,21:05:12 [INFO] Epoch: 10/50 -- Train Loss: 0.335 -- Validation Loss: 0.667 -- Validation ACC: 0.778 -- Validation F1: 0.750
+2024-07-16,21:05:27 [INFO] Epoch: 20/50 -- Train Loss: 0.214 -- Validation Loss: 0.666 -- Validation ACC: 0.778 -- Validation F1: 0.750
+2024-07-16,21:05:42 [INFO] Epoch: 30/50 -- Train Loss: 0.375 -- Validation Loss: 0.664 -- Validation ACC: 0.778 -- Validation F1: 0.778
+2024-07-16,21:05:55 [INFO] Epoch: 40/50 -- Train Loss: 0.001 -- Validation Loss: 0.708 -- Validation ACC: 0.778 -- Validation F1: 0.778
+2024-07-16,21:06:02 [INFO] Epoch: 44/50 -- Train Loss: 0.625 -- Validation Loss: 0.695 -- Validation ACC: 0.778 -- Validation F1: 0.778
+2024-07-16,21:06:04 [INFO] Epoch: 45/50 -- Train Loss: 0.054 -- Validation Loss: 0.685 -- Validation ACC: 0.778 -- Validation F1: 0.750
+2024-07-16,21:06:05 [INFO] Epoch: 46/50 -- Train Loss: 0.818 -- Validation Loss: 0.704 -- Validation ACC: 0.778 -- Validation F1: 0.750
+2024-07-16,21:06:07 [INFO] Epoch: 47/50 -- Train Loss: 0.231 -- Validation Loss: 0.732 -- Validation ACC: 0.778 -- Validation F1: 0.750
+2024-07-16,21:06:09 [INFO] Epoch: 48/50 -- Train Loss: 0.027 -- Validation Loss: 0.779 -- Validation ACC: 0.722 -- Validation F1: 0.667
+2024-07-16,21:06:11 [INFO] Epoch: 49/50 -- Train Loss: 1.327 -- Validation Loss: 0.790 -- Validation ACC: 0.722 -- Validation F1: 0.667
+2024-07-16,21:06:11 [INFO] Run 0/5: Average Over Last 6 epochs -- Valid ACC: 0.7592592592592592 -- Valid F1-score: 0.7268518606821696
+2024-07-16,21:06:12 [INFO] Test Results of Run 0/5: -- Test Loss: 0.946 -- Test ACC: 0.670 -- Test F1: 0.725
+2024-07-16,21:06:13 [INFO] Epoch: 0/50 -- Train Loss: 0.001 -- Validation Loss: 1.206 -- Validation ACC: 0.667 -- Validation F1: 0.700
+2024-07-16,21:06:27 [INFO] Epoch: 10/50 -- Train Loss: 0.238 -- Validation Loss: 0.908 -- Validation ACC: 0.722 -- Validation F1: 0.667
+2024-07-16,21:06:42 [INFO] Epoch: 20/50 -- Train Loss: 0.053 -- Validation Loss: 0.785 -- Validation ACC: 0.667 -- Validation F1: 0.625
+2024-07-16,21:06:55 [INFO] Epoch: 30/50 -- Train Loss: 0.902 -- Validation Loss: 0.792 -- Validation ACC: 0.722 -- Validation F1: 0.667
+2024-07-16,21:07:10 [INFO] Epoch: 40/50 -- Train Loss: 0.929 -- Validation Loss: 1.056 -- Validation ACC: 0.722 -- Validation F1: 0.667
+2024-07-16,21:07:15 [INFO] Epoch: 44/50 -- Train Loss: 0.434 -- Validation Loss: 1.142 -- Validation ACC: 0.722 -- Validation F1: 0.667
+2024-07-16,21:07:17 [INFO] Epoch: 45/50 -- Train Loss: 0.692 -- Validation Loss: 1.023 -- Validation ACC: 0.722 -- Validation F1: 0.667
+2024-07-16,21:07:20 [INFO] Epoch: 46/50 -- Train Loss: 0.191 -- Validation Loss: 0.972 -- Validation ACC: 0.722 -- Validation F1: 0.667
+2024-07-16,21:07:21 [INFO] Epoch: 47/50 -- Train Loss: 0.345 -- Validation Loss: 0.921 -- Validation ACC: 0.667 -- Validation F1: 0.625
+2024-07-16,21:07:23 [INFO] Epoch: 48/50 -- Train Loss: 0.088 -- Validation Loss: 0.894 -- Validation ACC: 0.722 -- Validation F1: 0.706
+2024-07-16,21:07:25 [INFO] Epoch: 49/50 -- Train Loss: 0.387 -- Validation Loss: 0.910 -- Validation ACC: 0.778 -- Validation F1: 0.778
+2024-07-16,21:07:25 [INFO] Run 1/5: Average Over Last 6 epochs -- Valid ACC: 0.7222222222222222 -- Valid F1-score: 0.6847767035166422
+2024-07-16,21:07:25 [INFO] Test Results of Run 1/5: -- Test Loss: 0.977 -- Test ACC: 0.739 -- Test F1: 0.808
+2024-07-16,21:07:27 [INFO] Epoch: 0/50 -- Train Loss: 0.471 -- Validation Loss: 0.835 -- Validation ACC: 0.722 -- Validation F1: 0.706
+2024-07-16,21:07:41 [INFO] Epoch: 10/50 -- Train Loss: 0.608 -- Validation Loss: 1.144 -- Validation ACC: 0.722 -- Validation F1: 0.737
+2024-07-16,21:07:55 [INFO] Epoch: 20/50 -- Train Loss: 0.370 -- Validation Loss: 0.791 -- Validation ACC: 0.778 -- Validation F1: 0.750
+2024-07-16,21:08:09 [INFO] Epoch: 30/50 -- Train Loss: 0.119 -- Validation Loss: 0.853 -- Validation ACC: 0.778 -- Validation F1: 0.778
+2024-07-16,21:08:24 [INFO] Epoch: 40/50 -- Train Loss: 0.234 -- Validation Loss: 0.951 -- Validation ACC: 0.722 -- Validation F1: 0.706
+2024-07-16,21:08:30 [INFO] Epoch: 44/50 -- Train Loss: 0.084 -- Validation Loss: 1.135 -- Validation ACC: 0.722 -- Validation F1: 0.706
+2024-07-16,21:08:32 [INFO] Epoch: 45/50 -- Train Loss: 0.948 -- Validation Loss: 1.123 -- Validation ACC: 0.722 -- Validation F1: 0.706
+2024-07-16,21:08:34 [INFO] Epoch: 46/50 -- Train Loss: 0.923 -- Validation Loss: 1.151 -- Validation ACC: 0.722 -- Validation F1: 0.706
+2024-07-16,21:08:35 [INFO] Epoch: 47/50 -- Train Loss: 0.495 -- Validation Loss: 1.181 -- Validation ACC: 0.722 -- Validation F1: 0.706
+2024-07-16,21:08:37 [INFO] Epoch: 48/50 -- Train Loss: 0.278 -- Validation Loss: 1.221 -- Validation ACC: 0.667 -- Validation F1: 0.625
+2024-07-16,21:08:39 [INFO] Epoch: 49/50 -- Train Loss: 1.061 -- Validation Loss: 1.271 -- Validation ACC: 0.722 -- Validation F1: 0.667
+2024-07-16,21:08:39 [INFO] Run 2/5: Average Over Last 6 epochs -- Valid ACC: 0.7129629629629629 -- Valid F1-score: 0.6858660280704498
+2024-07-16,21:08:40 [INFO] Test Results of Run 2/5: -- Test Loss: 1.246 -- Test ACC: 0.652 -- Test F1: 0.714
+2024-07-16,21:08:41 [INFO] Epoch: 0/50 -- Train Loss: 0.145 -- Validation Loss: 0.764 -- Validation ACC: 0.778 -- Validation F1: 0.778
+2024-07-16,21:08:55 [INFO] Epoch: 10/50 -- Train Loss: 0.199 -- Validation Loss: 0.816 -- Validation ACC: 0.722 -- Validation F1: 0.667
+2024-07-16,21:09:10 [INFO] Epoch: 20/50 -- Train Loss: 0.407 -- Validation Loss: 0.846 -- Validation ACC: 0.778 -- Validation F1: 0.778
+2024-07-16,21:09:24 [INFO] Epoch: 30/50 -- Train Loss: 0.453 -- Validation Loss: 0.751 -- Validation ACC: 0.722 -- Validation F1: 0.667
+2024-07-16,21:09:38 [INFO] Epoch: 40/50 -- Train Loss: 0.353 -- Validation Loss: 0.753 -- Validation ACC: 0.722 -- Validation F1: 0.667
+2024-07-16,21:09:44 [INFO] Epoch: 44/50 -- Train Loss: 0.204 -- Validation Loss: 0.792 -- Validation ACC: 0.722 -- Validation F1: 0.706
+2024-07-16,21:09:46 [INFO] Epoch: 45/50 -- Train Loss: 0.164 -- Validation Loss: 0.857 -- Validation ACC: 0.722 -- Validation F1: 0.737
+2024-07-16,21:09:48 [INFO] Epoch: 46/50 -- Train Loss: 0.186 -- Validation Loss: 0.951 -- Validation ACC: 0.722 -- Validation F1: 0.737
+2024-07-16,21:09:50 [INFO] Epoch: 47/50 -- Train Loss: 0.633 -- Validation Loss: 0.994 -- Validation ACC: 0.722 -- Validation F1: 0.737
+2024-07-16,21:09:52 [INFO] Epoch: 48/50 -- Train Loss: 0.275 -- Validation Loss: 0.913 -- Validation ACC: 0.722 -- Validation F1: 0.737
+2024-07-16,21:09:54 [INFO] Epoch: 49/50 -- Train Loss: 0.285 -- Validation Loss: 0.850 -- Validation ACC: 0.722 -- Validation F1: 0.706
+2024-07-16,21:09:54 [INFO] Run 3/5: Average Over Last 6 epochs -- Valid ACC: 0.7222222222222222 -- Valid F1-score: 0.7265221873919169
+2024-07-16,21:09:54 [INFO] Test Results of Run 3/5: -- Test Loss: 1.026 -- Test ACC: 0.765 -- Test F1: 0.830
+2024-07-16,21:09:56 [INFO] Epoch: 0/50 -- Train Loss: 1.669 -- Validation Loss: 0.843 -- Validation ACC: 0.778 -- Validation F1: 0.778
+2024-07-16,21:10:09 [INFO] Epoch: 10/50 -- Train Loss: 1.076 -- Validation Loss: 0.825 -- Validation ACC: 0.722 -- Validation F1: 0.667
+2024-07-16,21:10:24 [INFO] Epoch: 20/50 -- Train Loss: 0.540 -- Validation Loss: 0.744 -- Validation ACC: 0.778 -- Validation F1: 0.778
+2024-07-16,21:10:39 [INFO] Epoch: 30/50 -- Train Loss: 0.001 -- Validation Loss: 0.971 -- Validation ACC: 0.667 -- Validation F1: 0.700
+2024-07-16,21:10:53 [INFO] Epoch: 40/50 -- Train Loss: 1.216 -- Validation Loss: 0.756 -- Validation ACC: 0.778 -- Validation F1: 0.750
+2024-07-16,21:11:00 [INFO] Epoch: 44/50 -- Train Loss: 1.072 -- Validation Loss: 0.765 -- Validation ACC: 0.778 -- Validation F1: 0.750
+2024-07-16,21:11:01 [INFO] Epoch: 45/50 -- Train Loss: 0.286 -- Validation Loss: 0.769 -- Validation ACC: 0.778 -- Validation F1: 0.750
+2024-07-16,21:11:03 [INFO] Epoch: 46/50 -- Train Loss: 0.507 -- Validation Loss: 0.785 -- Validation ACC: 0.778 -- Validation F1: 0.750
+2024-07-16,21:11:05 [INFO] Epoch: 47/50 -- Train Loss: 0.279 -- Validation Loss: 0.802 -- Validation ACC: 0.722 -- Validation F1: 0.706
+2024-07-16,21:11:07 [INFO] Epoch: 48/50 -- Train Loss: 1.112 -- Validation Loss: 0.789 -- Validation ACC: 0.778 -- Validation F1: 0.750
+2024-07-16,21:11:08 [INFO] Epoch: 49/50 -- Train Loss: 0.651 -- Validation Loss: 0.794 -- Validation ACC: 0.778 -- Validation F1: 0.750
+2024-07-16,21:11:08 [INFO] Run 4/5: Average Over Last 6 epochs -- Valid ACC: 0.7685185185185186 -- Valid F1-score: 0.7426470617453257
+2024-07-16,21:11:09 [INFO] Test Results of Run 4/5: -- Test Loss: 0.888 -- Test ACC: 0.704 -- Test F1: 0.770
+2024-07-16,21:11:09 [INFO] Validation average after 5 runs -- ACC: 0.737 -- F1-score: 0.713
+2024-07-16,21:11:09 [INFO] Test average after 5 runs -- ACC: 0.706 -- F1-score: 0.769
+2024-07-16,21:11:09 [INFO] Finished round 3/10 of experiments!
+2024-07-16,21:11:09 [INFO] Started round 4/10 of experiments!
+2024-07-16,21:11:10 [INFO] Loading previous pretrained model at ./pretrained/GCN_Pretrained_2024-07-01-15-03-17.pth
+2024-07-16,21:11:10 [INFO] Pretrained GNN on Source Dataset -- Test Loss: 1.048 -- Test ACC: 0.696 -- Test F1-score: 0.759
+2024-07-16,21:11:11 [INFO] Pretrained GNN on Target Dataset Without Prompting: -- Validation Loss: 0.854 -- Validation ACC: 0.500 -- Validation F1-score: 0.571 -- Test Loss: 0.781 -- Test ACC: 0.713 -- Test F1-score: 0.784
+2024-07-16,21:11:13 [INFO] Epoch: 0/50 -- Train Loss: 1.354 -- Validation Loss: 1.017 -- Validation ACC: 0.556 -- Validation F1: 0.636
+2024-07-16,21:11:27 [INFO] Epoch: 10/50 -- Train Loss: 0.006 -- Validation Loss: 1.751 -- Validation ACC: 0.500 -- Validation F1: 0.609
+2024-07-16,21:11:41 [INFO] Epoch: 20/50 -- Train Loss: 0.038 -- Validation Loss: 1.064 -- Validation ACC: 0.500 -- Validation F1: 0.571
+2024-07-16,21:11:54 [INFO] Epoch: 30/50 -- Train Loss: 0.725 -- Validation Loss: 1.256 -- Validation ACC: 0.500 -- Validation F1: 0.571
+2024-07-16,21:12:08 [INFO] Epoch: 40/50 -- Train Loss: 0.051 -- Validation Loss: 1.509 -- Validation ACC: 0.444 -- Validation F1: 0.545
+2024-07-16,21:12:13 [INFO] Epoch: 44/50 -- Train Loss: 0.138 -- Validation Loss: 2.003 -- Validation ACC: 0.389 -- Validation F1: 0.522
+2024-07-16,21:12:15 [INFO] Epoch: 45/50 -- Train Loss: 0.027 -- Validation Loss: 1.831 -- Validation ACC: 0.389 -- Validation F1: 0.522
+2024-07-16,21:12:17 [INFO] Epoch: 46/50 -- Train Loss: 0.097 -- Validation Loss: 1.782 -- Validation ACC: 0.389 -- Validation F1: 0.522
+2024-07-16,21:12:18 [INFO] Epoch: 47/50 -- Train Loss: 0.094 -- Validation Loss: 1.642 -- Validation ACC: 0.444 -- Validation F1: 0.545
+2024-07-16,21:12:20 [INFO] Epoch: 48/50 -- Train Loss: 0.073 -- Validation Loss: 1.309 -- Validation ACC: 0.444 -- Validation F1: 0.545
+2024-07-16,21:12:22 [INFO] Epoch: 49/50 -- Train Loss: 0.223 -- Validation Loss: 1.111 -- Validation ACC: 0.500 -- Validation F1: 0.571
+2024-07-16,21:12:22 [INFO] Run 0/5: Average Over Last 6 epochs -- Valid ACC: 0.4259259259259259 -- Valid F1-score: 0.5379258493582407
+2024-07-16,21:12:22 [INFO] Test Results of Run 0/5: -- Test Loss: 0.875 -- Test ACC: 0.722 -- Test F1: 0.805
+2024-07-16,21:12:24 [INFO] Epoch: 0/50 -- Train Loss: 0.178 -- Validation Loss: 0.626 -- Validation ACC: 0.667 -- Validation F1: 0.571
+2024-07-16,21:12:38 [INFO] Epoch: 10/50 -- Train Loss: 0.679 -- Validation Loss: 1.160 -- Validation ACC: 0.500 -- Validation F1: 0.571
+2024-07-16,21:12:53 [INFO] Epoch: 20/50 -- Train Loss: 0.508 -- Validation Loss: 0.853 -- Validation ACC: 0.611 -- Validation F1: 0.588
+2024-07-16,21:13:07 [INFO] Epoch: 30/50 -- Train Loss: 0.367 -- Validation Loss: 1.051 -- Validation ACC: 0.556 -- Validation F1: 0.600
+2024-07-16,21:13:20 [INFO] Epoch: 40/50 -- Train Loss: 0.620 -- Validation Loss: 0.677 -- Validation ACC: 0.611 -- Validation F1: 0.462
+2024-07-16,21:13:27 [INFO] Epoch: 44/50 -- Train Loss: 0.068 -- Validation Loss: 0.977 -- Validation ACC: 0.556 -- Validation F1: 0.600
+2024-07-16,21:13:28 [INFO] Epoch: 45/50 -- Train Loss: 1.604 -- Validation Loss: 1.095 -- Validation ACC: 0.556 -- Validation F1: 0.600
+2024-07-16,21:13:30 [INFO] Epoch: 46/50 -- Train Loss: 0.047 -- Validation Loss: 1.092 -- Validation ACC: 0.556 -- Validation F1: 0.600
+2024-07-16,21:13:32 [INFO] Epoch: 47/50 -- Train Loss: 0.540 -- Validation Loss: 1.129 -- Validation ACC: 0.500 -- Validation F1: 0.571
+2024-07-16,21:13:33 [INFO] Epoch: 48/50 -- Train Loss: 0.090 -- Validation Loss: 1.224 -- Validation ACC: 0.500 -- Validation F1: 0.571
+2024-07-16,21:13:35 [INFO] Epoch: 49/50 -- Train Loss: 0.177 -- Validation Loss: 1.203 -- Validation ACC: 0.500 -- Validation F1: 0.571
+2024-07-16,21:13:35 [INFO] Run 1/5: Average Over Last 6 epochs -- Valid ACC: 0.5277777777777778 -- Valid F1-score: 0.5857143104076385
+2024-07-16,21:13:36 [INFO] Test Results of Run 1/5: -- Test Loss: 0.825 -- Test ACC: 0.730 -- Test F1: 0.812
+2024-07-16,21:13:38 [INFO] Epoch: 0/50 -- Train Loss: 0.043 -- Validation Loss: 1.165 -- Validation ACC: 0.500 -- Validation F1: 0.571
+2024-07-16,21:13:51 [INFO] Epoch: 10/50 -- Train Loss: 0.161 -- Validation Loss: 0.565 -- Validation ACC: 0.667 -- Validation F1: 0.571
+2024-07-16,21:14:07 [INFO] Epoch: 20/50 -- Train Loss: 0.090 -- Validation Loss: 1.085 -- Validation ACC: 0.556 -- Validation F1: 0.636
+2024-07-16,21:14:21 [INFO] Epoch: 30/50 -- Train Loss: 0.993 -- Validation Loss: 1.223 -- Validation ACC: 0.556 -- Validation F1: 0.636
+2024-07-16,21:14:35 [INFO] Epoch: 40/50 -- Train Loss: 1.099 -- Validation Loss: 0.883 -- Validation ACC: 0.611 -- Validation F1: 0.632
+2024-07-16,21:14:41 [INFO] Epoch: 44/50 -- Train Loss: 0.065 -- Validation Loss: 0.849 -- Validation ACC: 0.611 -- Validation F1: 0.632
+2024-07-16,21:14:42 [INFO] Epoch: 45/50 -- Train Loss: 2.098 -- Validation Loss: 1.020 -- Validation ACC: 0.611 -- Validation F1: 0.632
+2024-07-16,21:14:44 [INFO] Epoch: 46/50 -- Train Loss: 0.046 -- Validation Loss: 1.142 -- Validation ACC: 0.556 -- Validation F1: 0.636
+2024-07-16,21:14:45 [INFO] Epoch: 47/50 -- Train Loss: 0.133 -- Validation Loss: 1.349 -- Validation ACC: 0.500 -- Validation F1: 0.609
+2024-07-16,21:14:47 [INFO] Epoch: 48/50 -- Train Loss: 0.776 -- Validation Loss: 1.460 -- Validation ACC: 0.500 -- Validation F1: 0.609
+2024-07-16,21:14:49 [INFO] Epoch: 49/50 -- Train Loss: 0.008 -- Validation Loss: 1.474 -- Validation ACC: 0.500 -- Validation F1: 0.609
+2024-07-16,21:14:49 [INFO] Run 2/5: Average Over Last 6 epochs -- Valid ACC: 0.5462962962962963 -- Valid F1-score: 0.6209347248077393
+2024-07-16,21:14:49 [INFO] Test Results of Run 2/5: -- Test Loss: 0.962 -- Test ACC: 0.739 -- Test F1: 0.824
+2024-07-16,21:14:51 [INFO] Epoch: 0/50 -- Train Loss: 0.101 -- Validation Loss: 0.800 -- Validation ACC: 0.611 -- Validation F1: 0.588
+2024-07-16,21:15:04 [INFO] Epoch: 10/50 -- Train Loss: 2.086 -- Validation Loss: 2.083 -- Validation ACC: 0.444 -- Validation F1: 0.583
+2024-07-16,21:15:19 [INFO] Epoch: 20/50 -- Train Loss: 0.822 -- Validation Loss: 0.573 -- Validation ACC: 0.722 -- Validation F1: 0.667
+2024-07-16,21:15:32 [INFO] Epoch: 30/50 -- Train Loss: 0.383 -- Validation Loss: 0.882 -- Validation ACC: 0.556 -- Validation F1: 0.556
+2024-07-16,21:15:47 [INFO] Epoch: 40/50 -- Train Loss: 0.102 -- Validation Loss: 1.213 -- Validation ACC: 0.500 -- Validation F1: 0.571
+2024-07-16,21:15:53 [INFO] Epoch: 44/50 -- Train Loss: 0.891 -- Validation Loss: 1.568 -- Validation ACC: 0.444 -- Validation F1: 0.545
+2024-07-16,21:15:54 [INFO] Epoch: 45/50 -- Train Loss: 1.326 -- Validation Loss: 1.294 -- Validation ACC: 0.444 -- Validation F1: 0.545
+2024-07-16,21:15:56 [INFO] Epoch: 46/50 -- Train Loss: 1.065 -- Validation Loss: 0.958 -- Validation ACC: 0.500 -- Validation F1: 0.571
+2024-07-16,21:15:58 [INFO] Epoch: 47/50 -- Train Loss: 0.219 -- Validation Loss: 0.855 -- Validation ACC: 0.611 -- Validation F1: 0.632
+2024-07-16,21:15:59 [INFO] Epoch: 48/50 -- Train Loss: 2.970 -- Validation Loss: 1.135 -- Validation ACC: 0.500 -- Validation F1: 0.571
+2024-07-16,21:16:01 [INFO] Epoch: 49/50 -- Train Loss: 0.154 -- Validation Loss: 1.748 -- Validation ACC: 0.500 -- Validation F1: 0.609
+2024-07-16,21:16:01 [INFO] Run 3/5: Average Over Last 6 epochs -- Valid ACC: 0.5 -- Valid F1-score: 0.5790068109830221
+2024-07-16,21:16:02 [INFO] Test Results of Run 3/5: -- Test Loss: 1.226 -- Test ACC: 0.687 -- Test F1: 0.798
+2024-07-16,21:16:03 [INFO] Epoch: 0/50 -- Train Loss: 0.185 -- Validation Loss: 0.569 -- Validation ACC: 0.722 -- Validation F1: 0.615
+2024-07-16,21:16:17 [INFO] Epoch: 10/50 -- Train Loss: 0.437 -- Validation Loss: 1.420 -- Validation ACC: 0.500 -- Validation F1: 0.571
+2024-07-16,21:16:31 [INFO] Epoch: 20/50 -- Train Loss: 0.346 -- Validation Loss: 1.159 -- Validation ACC: 0.556 -- Validation F1: 0.600
+2024-07-16,21:16:45 [INFO] Epoch: 30/50 -- Train Loss: 0.160 -- Validation Loss: 1.564 -- Validation ACC: 0.556 -- Validation F1: 0.600
+2024-07-16,21:16:58 [INFO] Epoch: 40/50 -- Train Loss: 0.625 -- Validation Loss: 0.709 -- Validation ACC: 0.667 -- Validation F1: 0.571
+2024-07-16,21:17:04 [INFO] Epoch: 44/50 -- Train Loss: 0.091 -- Validation Loss: 1.008 -- Validation ACC: 0.500 -- Validation F1: 0.526
+2024-07-16,21:17:05 [INFO] Epoch: 45/50 -- Train Loss: 0.155 -- Validation Loss: 1.127 -- Validation ACC: 0.556 -- Validation F1: 0.600
+2024-07-16,21:17:07 [INFO] Epoch: 46/50 -- Train Loss: 0.041 -- Validation Loss: 1.246 -- Validation ACC: 0.556 -- Validation F1: 0.600
+2024-07-16,21:17:08 [INFO] Epoch: 47/50 -- Train Loss: 0.009 -- Validation Loss: 1.318 -- Validation ACC: 0.500 -- Validation F1: 0.571
+2024-07-16,21:17:10 [INFO] Epoch: 48/50 -- Train Loss: 0.106 -- Validation Loss: 1.261 -- Validation ACC: 0.556 -- Validation F1: 0.600
+2024-07-16,21:17:12 [INFO] Epoch: 49/50 -- Train Loss: 0.218 -- Validation Loss: 1.159 -- Validation ACC: 0.556 -- Validation F1: 0.600
+2024-07-16,21:17:12 [INFO] Run 4/5: Average Over Last 6 epochs -- Valid ACC: 0.5370370370370371 -- Valid F1-score: 0.5829574167728424
+2024-07-16,21:17:13 [INFO] Test Results of Run 4/5: -- Test Loss: 0.854 -- Test ACC: 0.722 -- Test F1: 0.800
+2024-07-16,21:17:13 [INFO] Validation average after 5 runs -- ACC: 0.507 -- F1-score: 0.581
+2024-07-16,21:17:13 [INFO] Test average after 5 runs -- ACC: 0.720 -- F1-score: 0.808
+2024-07-16,21:17:13 [INFO] Finished round 4/10 of experiments!
+2024-07-16,21:17:13 [INFO] Started round 5/10 of experiments!
+2024-07-16,21:17:14 [INFO] Setting for pretraining: Model: {'gnn_type': 'gcn', 'in_channels': 56, 'hidden_channels': 512, 'out_channels': 2, 'num_layers': 3, 'dropout': 0.4, 'with_bn': False, 'with_head': True} -- Optimizer: {'lr': 0.01, 'scheduler_step_size': 50, 'scheduler_gamma': 0.5, 'weight_decay': 0.0} -- Training: {'n_epochs': 100}
+2024-07-16,21:17:14 [INFO] Loading previous pretrained model at ./pretrained/GCN_Pretrained_2024-07-01-15-05-37.pth
+2024-07-16,21:17:14 [INFO] Prompting method: flex_match -- Setting: Prompting function: gpf_plus -- Target Dataset: DHFR
+2024-07-16,21:17:14 [INFO] Setting for prompt tuning: Prompt: {'emb_dim': 56, 'h_dim': 512, 'output_dim': 56, 'prompt_fn': 'gpf_plus', 'token_num': 20, 'cross_prune': 0.8, 'inner_prune': 0.3, 'attn_with_param': False} -- Pretrained Model: {'gnn_type': 'gcn', 'in_channels': 56, 'hidden_channels': 512, 'out_channels': 2, 'num_layers': 3, 'dropout': 0.4, 'with_bn': False, 'with_head': True} -- Optimizer: {'lr': 0.01, 'scheduler_step_size': 50, 'scheduler_gamma': 0.5, 'weight_decay': 0.0} -- Training: {'aug_type': 'feature', 'pos_aug_mode': 'mask', 'p_raug': 0.15, 'n_epochs': 50, 'r_reg': 0.0, 'soft_label': False, 'clutering_iters': 3, 'iterative_clustering': False, 'entropy_div_ratio': 3, 'w_entropy_loss': 0.0, 'w_softmax_loss': 0.0, 'w_domain_loss': 0.0, 'light_aug_prob': 0.1, 'light_aug_mode': 'mask', 'num_classes': 2, 'cut_off': 0.5}
+2024-07-16,21:17:14 [INFO] Prompt tuning started: Num runs: 5 -- Eval step: 10
+2024-07-16,21:17:14 [INFO] Pretrained GNN on Source Dataset -- Test Loss: 0.768 -- Test ACC: 0.687 -- Test F1-score: 0.684
+2024-07-16,21:17:14 [INFO] Pretrained GNN on Target Dataset Without Prompting: -- Validation Loss: 0.232 -- Validation ACC: 0.889 -- Validation F1-score: 0.900 -- Test Loss: 0.871 -- Test ACC: 0.722 -- Test F1-score: 0.754
+2024-07-16,21:17:16 [INFO] Epoch: 0/50 -- Train Loss: 0.921 -- Validation Loss: 0.299 -- Validation ACC: 0.778 -- Validation F1: 0.750
+2024-07-16,21:17:29 [INFO] Epoch: 10/50 -- Train Loss: 0.406 -- Validation Loss: 0.420 -- Validation ACC: 0.778 -- Validation F1: 0.750
+2024-07-16,21:17:44 [INFO] Epoch: 20/50 -- Train Loss: 0.468 -- Validation Loss: 0.276 -- Validation ACC: 0.889 -- Validation F1: 0.900
+2024-07-16,21:17:57 [INFO] Epoch: 30/50 -- Train Loss: 0.382 -- Validation Loss: 0.268 -- Validation ACC: 0.889 -- Validation F1: 0.900
+2024-07-16,21:18:12 [INFO] Epoch: 40/50 -- Train Loss: 0.384 -- Validation Loss: 0.583 -- Validation ACC: 0.778 -- Validation F1: 0.750
+2024-07-16,21:18:18 [INFO] Epoch: 44/50 -- Train Loss: 0.424 -- Validation Loss: 0.331 -- Validation ACC: 0.778 -- Validation F1: 0.750
+2024-07-16,21:18:19 [INFO] Epoch: 45/50 -- Train Loss: 0.556 -- Validation Loss: 0.322 -- Validation ACC: 0.778 -- Validation F1: 0.750
+2024-07-16,21:18:21 [INFO] Epoch: 46/50 -- Train Loss: 0.028 -- Validation Loss: 0.315 -- Validation ACC: 0.778 -- Validation F1: 0.750
+2024-07-16,21:18:22 [INFO] Epoch: 47/50 -- Train Loss: 0.443 -- Validation Loss: 0.308 -- Validation ACC: 0.778 -- Validation F1: 0.750
+2024-07-16,21:18:24 [INFO] Epoch: 48/50 -- Train Loss: 0.128 -- Validation Loss: 0.326 -- Validation ACC: 0.778 -- Validation F1: 0.750
+2024-07-16,21:18:26 [INFO] Epoch: 49/50 -- Train Loss: 1.394 -- Validation Loss: 0.335 -- Validation ACC: 0.778 -- Validation F1: 0.750
+2024-07-16,21:18:26 [INFO] Run 0/5: Average Over Last 6 epochs -- Valid ACC: 0.7777777777777778 -- Valid F1-score: 0.75
+2024-07-16,21:18:27 [INFO] Test Results of Run 0/5: -- Test Loss: 0.892 -- Test ACC: 0.643 -- Test F1: 0.655
+2024-07-16,21:18:28 [INFO] Epoch: 0/50 -- Train Loss: 0.000 -- Validation Loss: 0.583 -- Validation ACC: 0.778 -- Validation F1: 0.833
+2024-07-16,21:18:42 [INFO] Epoch: 10/50 -- Train Loss: 1.501 -- Validation Loss: 0.307 -- Validation ACC: 0.778 -- Validation F1: 0.750
+2024-07-16,21:18:56 [INFO] Epoch: 20/50 -- Train Loss: 0.021 -- Validation Loss: 0.438 -- Validation ACC: 0.778 -- Validation F1: 0.750
+2024-07-16,21:19:09 [INFO] Epoch: 30/50 -- Train Loss: 0.529 -- Validation Loss: 0.332 -- Validation ACC: 0.778 -- Validation F1: 0.750
+2024-07-16,21:19:23 [INFO] Epoch: 40/50 -- Train Loss: 0.732 -- Validation Loss: 0.487 -- Validation ACC: 0.778 -- Validation F1: 0.818
+2024-07-16,21:19:28 [INFO] Epoch: 44/50 -- Train Loss: 0.008 -- Validation Loss: 0.275 -- Validation ACC: 0.833 -- Validation F1: 0.842
+2024-07-16,21:19:30 [INFO] Epoch: 45/50 -- Train Loss: 0.623 -- Validation Loss: 0.275 -- Validation ACC: 0.889 -- Validation F1: 0.889
+2024-07-16,21:19:32 [INFO] Epoch: 46/50 -- Train Loss: 0.000 -- Validation Loss: 0.283 -- Validation ACC: 0.889 -- Validation F1: 0.889
+2024-07-16,21:19:33 [INFO] Epoch: 47/50 -- Train Loss: 0.000 -- Validation Loss: 0.287 -- Validation ACC: 0.889 -- Validation F1: 0.889
+2024-07-16,21:19:35 [INFO] Epoch: 48/50 -- Train Loss: 0.007 -- Validation Loss: 0.305 -- Validation ACC: 0.833 -- Validation F1: 0.824
+2024-07-16,21:19:37 [INFO] Epoch: 49/50 -- Train Loss: 0.000 -- Validation Loss: 0.328 -- Validation ACC: 0.833 -- Validation F1: 0.824
+2024-07-16,21:19:37 [INFO] Run 1/5: Average Over Last 6 epochs -- Valid ACC: 0.861111111111111 -- Valid F1-score: 0.8593051334222158
+2024-07-16,21:19:37 [INFO] Test Results of Run 1/5: -- Test Loss: 0.948 -- Test ACC: 0.643 -- Test F1: 0.650
+2024-07-16,21:19:39 [INFO] Epoch: 0/50 -- Train Loss: 1.127 -- Validation Loss: 0.263 -- Validation ACC: 0.889 -- Validation F1: 0.900
+2024-07-16,21:19:52 [INFO] Epoch: 10/50 -- Train Loss: 0.000 -- Validation Loss: 0.279 -- Validation ACC: 0.778 -- Validation F1: 0.750
+2024-07-16,21:20:06 [INFO] Epoch: 20/50 -- Train Loss: 0.050 -- Validation Loss: 0.406 -- Validation ACC: 0.778 -- Validation F1: 0.750
+2024-07-16,21:20:20 [INFO] Epoch: 30/50 -- Train Loss: 0.102 -- Validation Loss: 0.413 -- Validation ACC: 0.778 -- Validation F1: 0.750
+2024-07-16,21:20:33 [INFO] Epoch: 40/50 -- Train Loss: 0.238 -- Validation Loss: 0.559 -- Validation ACC: 0.778 -- Validation F1: 0.750
+2024-07-16,21:20:40 [INFO] Epoch: 44/50 -- Train Loss: 0.032 -- Validation Loss: 0.462 -- Validation ACC: 0.778 -- Validation F1: 0.750
+2024-07-16,21:20:42 [INFO] Epoch: 45/50 -- Train Loss: 0.270 -- Validation Loss: 0.487 -- Validation ACC: 0.778 -- Validation F1: 0.750
+2024-07-16,21:20:43 [INFO] Epoch: 46/50 -- Train Loss: 1.195 -- Validation Loss: 0.539 -- Validation ACC: 0.778 -- Validation F1: 0.750
+2024-07-16,21:20:45 [INFO] Epoch: 47/50 -- Train Loss: 1.363 -- Validation Loss: 0.587 -- Validation ACC: 0.778 -- Validation F1: 0.750
+2024-07-16,21:20:47 [INFO] Epoch: 48/50 -- Train Loss: 0.664 -- Validation Loss: 0.593 -- Validation ACC: 0.778 -- Validation F1: 0.750
+2024-07-16,21:20:48 [INFO] Epoch: 49/50 -- Train Loss: 0.059 -- Validation Loss: 0.548 -- Validation ACC: 0.778 -- Validation F1: 0.750
+2024-07-16,21:20:48 [INFO] Run 2/5: Average Over Last 6 epochs -- Valid ACC: 0.7777777777777778 -- Valid F1-score: 0.75
+2024-07-16,21:20:49 [INFO] Test Results of Run 2/5: -- Test Loss: 0.963 -- Test ACC: 0.661 -- Test F1: 0.636
+2024-07-16,21:20:51 [INFO] Epoch: 0/50 -- Train Loss: 0.381 -- Validation Loss: 0.242 -- Validation ACC: 0.889 -- Validation F1: 0.900
+2024-07-16,21:21:04 [INFO] Epoch: 10/50 -- Train Loss: 0.050 -- Validation Loss: 0.256 -- Validation ACC: 0.889 -- Validation F1: 0.900
+2024-07-16,21:21:18 [INFO] Epoch: 20/50 -- Train Loss: 0.714 -- Validation Loss: 0.347 -- Validation ACC: 0.778 -- Validation F1: 0.750
+2024-07-16,21:21:32 [INFO] Epoch: 30/50 -- Train Loss: 0.012 -- Validation Loss: 0.335 -- Validation ACC: 0.778 -- Validation F1: 0.778
+2024-07-16,21:21:45 [INFO] Epoch: 40/50 -- Train Loss: 0.630 -- Validation Loss: 0.541 -- Validation ACC: 0.778 -- Validation F1: 0.750
+2024-07-16,21:21:51 [INFO] Epoch: 44/50 -- Train Loss: 0.521 -- Validation Loss: 0.414 -- Validation ACC: 0.778 -- Validation F1: 0.750
+2024-07-16,21:21:53 [INFO] Epoch: 45/50 -- Train Loss: 0.277 -- Validation Loss: 0.359 -- Validation ACC: 0.833 -- Validation F1: 0.842
+2024-07-16,21:21:55 [INFO] Epoch: 46/50 -- Train Loss: 0.706 -- Validation Loss: 0.348 -- Validation ACC: 0.833 -- Validation F1: 0.842
+2024-07-16,21:21:57 [INFO] Epoch: 47/50 -- Train Loss: 0.526 -- Validation Loss: 0.350 -- Validation ACC: 0.833 -- Validation F1: 0.842
+2024-07-16,21:21:58 [INFO] Epoch: 48/50 -- Train Loss: 0.172 -- Validation Loss: 0.356 -- Validation ACC: 0.833 -- Validation F1: 0.842
+2024-07-16,21:22:00 [INFO] Epoch: 49/50 -- Train Loss: 0.027 -- Validation Loss: 0.391 -- Validation ACC: 0.889 -- Validation F1: 0.909
+2024-07-16,21:22:00 [INFO] Run 3/5: Average Over Last 6 epochs -- Valid ACC: 0.8333333333333334 -- Valid F1-score: 0.8379186689853668
+2024-07-16,21:22:00 [INFO] Test Results of Run 3/5: -- Test Loss: 0.981 -- Test ACC: 0.678 -- Test F1: 0.748
+2024-07-16,21:22:02 [INFO] Epoch: 0/50 -- Train Loss: 0.635 -- Validation Loss: 0.244 -- Validation ACC: 0.889 -- Validation F1: 0.900
+2024-07-16,21:22:16 [INFO] Epoch: 10/50 -- Train Loss: 0.029 -- Validation Loss: 0.466 -- Validation ACC: 0.778 -- Validation F1: 0.750
+2024-07-16,21:22:29 [INFO] Epoch: 20/50 -- Train Loss: 0.401 -- Validation Loss: 0.352 -- Validation ACC: 0.778 -- Validation F1: 0.750
+2024-07-16,21:22:44 [INFO] Epoch: 30/50 -- Train Loss: 0.551 -- Validation Loss: 0.235 -- Validation ACC: 0.889 -- Validation F1: 0.900
+2024-07-16,21:22:57 [INFO] Epoch: 40/50 -- Train Loss: 0.051 -- Validation Loss: 0.285 -- Validation ACC: 0.889 -- Validation F1: 0.900
+2024-07-16,21:23:03 [INFO] Epoch: 44/50 -- Train Loss: 0.776 -- Validation Loss: 0.273 -- Validation ACC: 0.833 -- Validation F1: 0.842
+2024-07-16,21:23:05 [INFO] Epoch: 45/50 -- Train Loss: 0.428 -- Validation Loss: 0.269 -- Validation ACC: 0.833 -- Validation F1: 0.842
+2024-07-16,21:23:06 [INFO] Epoch: 46/50 -- Train Loss: 0.226 -- Validation Loss: 0.270 -- Validation ACC: 0.833 -- Validation F1: 0.842
+2024-07-16,21:23:08 [INFO] Epoch: 47/50 -- Train Loss: 0.571 -- Validation Loss: 0.271 -- Validation ACC: 0.833 -- Validation F1: 0.842
+2024-07-16,21:23:10 [INFO] Epoch: 48/50 -- Train Loss: 1.067 -- Validation Loss: 0.279 -- Validation ACC: 0.889 -- Validation F1: 0.900
+2024-07-16,21:23:12 [INFO] Epoch: 49/50 -- Train Loss: 0.428 -- Validation Loss: 0.286 -- Validation ACC: 0.944 -- Validation F1: 0.952
+2024-07-16,21:23:12 [INFO] Run 4/5: Average Over Last 6 epochs -- Valid ACC: 0.8611111111111112 -- Valid F1-score: 0.8701336681842804
+2024-07-16,21:23:12 [INFO] Test Results of Run 4/5: -- Test Loss: 0.927 -- Test ACC: 0.696 -- Test F1: 0.737
+2024-07-16,21:23:12 [INFO] Validation average after 5 runs -- ACC: 0.822 -- F1-score: 0.813
+2024-07-16,21:23:12 [INFO] Test average after 5 runs -- ACC: 0.664 -- F1-score: 0.685
+2024-07-16,21:23:12 [INFO] Finished round 5/10 of experiments!
+2024-07-16,21:23:12 [INFO] Started round 6/10 of experiments!
+2024-07-16,21:23:13 [INFO] Loading previous pretrained model at ./pretrained/GCN_Pretrained_2024-07-01-15-07-56.pth
+2024-07-16,21:23:13 [INFO] Pretrained GNN on Source Dataset -- Test Loss: 0.661 -- Test ACC: 0.626 -- Test F1-score: 0.770
+2024-07-16,21:23:14 [INFO] Pretrained GNN on Target Dataset Without Prompting: -- Validation Loss: 0.641 -- Validation ACC: 0.667 -- Validation F1-score: 0.800 -- Test Loss: 0.687 -- Test ACC: 0.574 -- Test F1-score: 0.729
+2024-07-16,21:23:16 [INFO] Epoch: 0/50 -- Train Loss: 0.579 -- Validation Loss: 0.641 -- Validation ACC: 0.667 -- Validation F1: 0.800
+2024-07-16,21:23:30 [INFO] Epoch: 10/50 -- Train Loss: 0.579 -- Validation Loss: 0.641 -- Validation ACC: 0.667 -- Validation F1: 0.800
+2024-07-16,21:23:44 [INFO] Epoch: 20/50 -- Train Loss: 0.579 -- Validation Loss: 0.641 -- Validation ACC: 0.667 -- Validation F1: 0.800
+2024-07-16,21:23:58 [INFO] Epoch: 30/50 -- Train Loss: 0.579 -- Validation Loss: 0.641 -- Validation ACC: 0.667 -- Validation F1: 0.800
+2024-07-16,21:24:11 [INFO] Epoch: 40/50 -- Train Loss: 0.579 -- Validation Loss: 0.641 -- Validation ACC: 0.667 -- Validation F1: 0.800
+2024-07-16,21:24:17 [INFO] Epoch: 44/50 -- Train Loss: 0.579 -- Validation Loss: 0.641 -- Validation ACC: 0.667 -- Validation F1: 0.800
+2024-07-16,21:24:19 [INFO] Epoch: 45/50 -- Train Loss: 0.579 -- Validation Loss: 0.641 -- Validation ACC: 0.667 -- Validation F1: 0.800
+2024-07-16,21:24:20 [INFO] Epoch: 46/50 -- Train Loss: 0.579 -- Validation Loss: 0.641 -- Validation ACC: 0.667 -- Validation F1: 0.800
+2024-07-16,21:24:22 [INFO] Epoch: 47/50 -- Train Loss: 0.579 -- Validation Loss: 0.641 -- Validation ACC: 0.667 -- Validation F1: 0.800
+2024-07-16,21:24:24 [INFO] Epoch: 48/50 -- Train Loss: 0.579 -- Validation Loss: 0.641 -- Validation ACC: 0.667 -- Validation F1: 0.800
+2024-07-16,21:24:25 [INFO] Epoch: 49/50 -- Train Loss: 0.579 -- Validation Loss: 0.641 -- Validation ACC: 0.667 -- Validation F1: 0.800
+2024-07-16,21:24:25 [INFO] Run 0/5: Average Over Last 6 epochs -- Valid ACC: 0.6666666666666666 -- Valid F1-score: 0.800000011920929
+2024-07-16,21:24:26 [INFO] Test Results of Run 0/5: -- Test Loss: 0.687 -- Test ACC: 0.574 -- Test F1: 0.729
+2024-07-16,21:24:28 [INFO] Epoch: 0/50 -- Train Loss: 0.579 -- Validation Loss: 0.641 -- Validation ACC: 0.667 -- Validation F1: 0.800
+2024-07-16,21:24:41 [INFO] Epoch: 10/50 -- Train Loss: 0.579 -- Validation Loss: 0.641 -- Validation ACC: 0.667 -- Validation F1: 0.800
+2024-07-16,21:24:55 [INFO] Epoch: 20/50 -- Train Loss: 0.579 -- Validation Loss: 0.641 -- Validation ACC: 0.667 -- Validation F1: 0.800
+2024-07-16,21:25:09 [INFO] Epoch: 30/50 -- Train Loss: 0.579 -- Validation Loss: 0.641 -- Validation ACC: 0.667 -- Validation F1: 0.800
+2024-07-16,21:25:22 [INFO] Epoch: 40/50 -- Train Loss: 0.579 -- Validation Loss: 0.641 -- Validation ACC: 0.667 -- Validation F1: 0.800
+2024-07-16,21:25:29 [INFO] Epoch: 44/50 -- Train Loss: 0.579 -- Validation Loss: 0.641 -- Validation ACC: 0.667 -- Validation F1: 0.800
+2024-07-16,21:25:30 [INFO] Epoch: 45/50 -- Train Loss: 0.579 -- Validation Loss: 0.641 -- Validation ACC: 0.667 -- Validation F1: 0.800
+2024-07-16,21:25:32 [INFO] Epoch: 46/50 -- Train Loss: 0.579 -- Validation Loss: 0.641 -- Validation ACC: 0.667 -- Validation F1: 0.800
+2024-07-16,21:25:34 [INFO] Epoch: 47/50 -- Train Loss: 0.579 -- Validation Loss: 0.641 -- Validation ACC: 0.667 -- Validation F1: 0.800
+2024-07-16,21:25:35 [INFO] Epoch: 48/50 -- Train Loss: 0.579 -- Validation Loss: 0.641 -- Validation ACC: 0.667 -- Validation F1: 0.800
+2024-07-16,21:25:37 [INFO] Epoch: 49/50 -- Train Loss: 0.579 -- Validation Loss: 0.641 -- Validation ACC: 0.667 -- Validation F1: 0.800
+2024-07-16,21:25:37 [INFO] Run 1/5: Average Over Last 6 epochs -- Valid ACC: 0.6666666666666666 -- Valid F1-score: 0.800000011920929
+2024-07-16,21:25:38 [INFO] Test Results of Run 1/5: -- Test Loss: 0.687 -- Test ACC: 0.574 -- Test F1: 0.729
+2024-07-16,21:25:39 [INFO] Epoch: 0/50 -- Train Loss: 0.579 -- Validation Loss: 0.641 -- Validation ACC: 0.667 -- Validation F1: 0.800
+2024-07-16,21:25:52 [INFO] Epoch: 10/50 -- Train Loss: 0.579 -- Validation Loss: 0.641 -- Validation ACC: 0.667 -- Validation F1: 0.800
+2024-07-16,21:26:06 [INFO] Epoch: 20/50 -- Train Loss: 0.579 -- Validation Loss: 0.641 -- Validation ACC: 0.667 -- Validation F1: 0.800
+2024-07-16,21:26:20 [INFO] Epoch: 30/50 -- Train Loss: 0.579 -- Validation Loss: 0.641 -- Validation ACC: 0.667 -- Validation F1: 0.800
+2024-07-16,21:26:33 [INFO] Epoch: 40/50 -- Train Loss: 0.579 -- Validation Loss: 0.641 -- Validation ACC: 0.667 -- Validation F1: 0.800
+2024-07-16,21:26:39 [INFO] Epoch: 44/50 -- Train Loss: 0.579 -- Validation Loss: 0.641 -- Validation ACC: 0.667 -- Validation F1: 0.800
+2024-07-16,21:26:41 [INFO] Epoch: 45/50 -- Train Loss: 0.579 -- Validation Loss: 0.641 -- Validation ACC: 0.667 -- Validation F1: 0.800
+2024-07-16,21:26:43 [INFO] Epoch: 46/50 -- Train Loss: 0.579 -- Validation Loss: 0.641 -- Validation ACC: 0.667 -- Validation F1: 0.800
+2024-07-16,21:26:45 [INFO] Epoch: 47/50 -- Train Loss: 0.579 -- Validation Loss: 0.641 -- Validation ACC: 0.667 -- Validation F1: 0.800
+2024-07-16,21:26:46 [INFO] Epoch: 48/50 -- Train Loss: 0.579 -- Validation Loss: 0.641 -- Validation ACC: 0.667 -- Validation F1: 0.800
+2024-07-16,21:26:48 [INFO] Epoch: 49/50 -- Train Loss: 0.579 -- Validation Loss: 0.641 -- Validation ACC: 0.667 -- Validation F1: 0.800
+2024-07-16,21:26:48 [INFO] Run 2/5: Average Over Last 6 epochs -- Valid ACC: 0.6666666666666666 -- Valid F1-score: 0.800000011920929
+2024-07-16,21:26:49 [INFO] Test Results of Run 2/5: -- Test Loss: 0.687 -- Test ACC: 0.574 -- Test F1: 0.729
+2024-07-16,21:26:50 [INFO] Epoch: 0/50 -- Train Loss: 0.579 -- Validation Loss: 0.641 -- Validation ACC: 0.667 -- Validation F1: 0.800
+2024-07-16,21:27:04 [INFO] Epoch: 10/50 -- Train Loss: 0.579 -- Validation Loss: 0.641 -- Validation ACC: 0.667 -- Validation F1: 0.800
+2024-07-16,21:27:18 [INFO] Epoch: 20/50 -- Train Loss: 0.579 -- Validation Loss: 0.641 -- Validation ACC: 0.667 -- Validation F1: 0.800
+2024-07-16,21:27:32 [INFO] Epoch: 30/50 -- Train Loss: 0.579 -- Validation Loss: 0.641 -- Validation ACC: 0.667 -- Validation F1: 0.800
+2024-07-16,21:27:46 [INFO] Epoch: 40/50 -- Train Loss: 0.579 -- Validation Loss: 0.641 -- Validation ACC: 0.667 -- Validation F1: 0.800
+2024-07-16,21:27:51 [INFO] Epoch: 44/50 -- Train Loss: 0.579 -- Validation Loss: 0.641 -- Validation ACC: 0.667 -- Validation F1: 0.800
+2024-07-16,21:27:53 [INFO] Epoch: 45/50 -- Train Loss: 0.579 -- Validation Loss: 0.641 -- Validation ACC: 0.667 -- Validation F1: 0.800
+2024-07-16,21:27:55 [INFO] Epoch: 46/50 -- Train Loss: 0.579 -- Validation Loss: 0.641 -- Validation ACC: 0.667 -- Validation F1: 0.800
+2024-07-16,21:27:57 [INFO] Epoch: 47/50 -- Train Loss: 0.579 -- Validation Loss: 0.641 -- Validation ACC: 0.667 -- Validation F1: 0.800
+2024-07-16,21:27:58 [INFO] Epoch: 48/50 -- Train Loss: 0.579 -- Validation Loss: 0.641 -- Validation ACC: 0.667 -- Validation F1: 0.800
+2024-07-16,21:28:00 [INFO] Epoch: 49/50 -- Train Loss: 0.579 -- Validation Loss: 0.641 -- Validation ACC: 0.667 -- Validation F1: 0.800
+2024-07-16,21:28:00 [INFO] Run 3/5: Average Over Last 6 epochs -- Valid ACC: 0.6666666666666666 -- Valid F1-score: 0.800000011920929
+2024-07-16,21:28:01 [INFO] Test Results of Run 3/5: -- Test Loss: 0.687 -- Test ACC: 0.574 -- Test F1: 0.729
+2024-07-16,21:28:03 [INFO] Epoch: 0/50 -- Train Loss: 0.579 -- Validation Loss: 0.641 -- Validation ACC: 0.667 -- Validation F1: 0.800
+2024-07-16,21:28:17 [INFO] Epoch: 10/50 -- Train Loss: 0.579 -- Validation Loss: 0.641 -- Validation ACC: 0.667 -- Validation F1: 0.800
+2024-07-16,21:28:31 [INFO] Epoch: 20/50 -- Train Loss: 0.579 -- Validation Loss: 0.641 -- Validation ACC: 0.667 -- Validation F1: 0.800
+2024-07-16,21:28:46 [INFO] Epoch: 30/50 -- Train Loss: 0.579 -- Validation Loss: 0.641 -- Validation ACC: 0.667 -- Validation F1: 0.800
+2024-07-16,21:28:59 [INFO] Epoch: 40/50 -- Train Loss: 0.579 -- Validation Loss: 0.641 -- Validation ACC: 0.667 -- Validation F1: 0.800
+2024-07-16,21:29:05 [INFO] Epoch: 44/50 -- Train Loss: 0.579 -- Validation Loss: 0.641 -- Validation ACC: 0.667 -- Validation F1: 0.800
+2024-07-16,21:29:07 [INFO] Epoch: 45/50 -- Train Loss: 0.579 -- Validation Loss: 0.641 -- Validation ACC: 0.667 -- Validation F1: 0.800
+2024-07-16,21:29:08 [INFO] Epoch: 46/50 -- Train Loss: 0.579 -- Validation Loss: 0.641 -- Validation ACC: 0.667 -- Validation F1: 0.800
+2024-07-16,21:29:10 [INFO] Epoch: 47/50 -- Train Loss: 0.579 -- Validation Loss: 0.641 -- Validation ACC: 0.667 -- Validation F1: 0.800
+2024-07-16,21:29:12 [INFO] Epoch: 48/50 -- Train Loss: 0.579 -- Validation Loss: 0.641 -- Validation ACC: 0.667 -- Validation F1: 0.800
+2024-07-16,21:29:13 [INFO] Epoch: 49/50 -- Train Loss: 0.579 -- Validation Loss: 0.641 -- Validation ACC: 0.667 -- Validation F1: 0.800
+2024-07-16,21:29:13 [INFO] Run 4/5: Average Over Last 6 epochs -- Valid ACC: 0.6666666666666666 -- Valid F1-score: 0.800000011920929
+2024-07-16,21:29:14 [INFO] Test Results of Run 4/5: -- Test Loss: 0.687 -- Test ACC: 0.574 -- Test F1: 0.729
+2024-07-16,21:29:14 [INFO] Validation average after 5 runs -- ACC: 0.667 -- F1-score: 0.800
+2024-07-16,21:29:14 [INFO] Test average after 5 runs -- ACC: 0.574 -- F1-score: 0.729
+2024-07-16,21:29:14 [INFO] Finished round 6/10 of experiments!
+2024-07-16,21:29:14 [INFO] Started round 7/10 of experiments!
+2024-07-16,21:29:15 [INFO] Loading previous pretrained model at ./pretrained/GCN_Pretrained_2024-07-01-15-10-20.pth
+2024-07-16,21:29:15 [INFO] Pretrained GNN on Source Dataset -- Test Loss: 0.642 -- Test ACC: 0.670 -- Test F1-score: 0.708
+2024-07-16,21:29:16 [INFO] Pretrained GNN on Target Dataset Without Prompting: -- Validation Loss: 0.357 -- Validation ACC: 0.833 -- Validation F1-score: 0.870 -- Test Loss: 0.708 -- Test ACC: 0.609 -- Test F1-score: 0.640
+2024-07-16,21:29:18 [INFO] Epoch: 0/50 -- Train Loss: 0.250 -- Validation Loss: 0.286 -- Validation ACC: 0.833 -- Validation F1: 0.880
+2024-07-16,21:29:31 [INFO] Epoch: 10/50 -- Train Loss: 0.778 -- Validation Loss: 0.287 -- Validation ACC: 0.833 -- Validation F1: 0.880
+2024-07-16,21:29:46 [INFO] Epoch: 20/50 -- Train Loss: 1.041 -- Validation Loss: 0.291 -- Validation ACC: 0.889 -- Validation F1: 0.917
+2024-07-16,21:30:01 [INFO] Epoch: 30/50 -- Train Loss: 0.497 -- Validation Loss: 0.393 -- Validation ACC: 0.778 -- Validation F1: 0.818
+2024-07-16,21:30:14 [INFO] Epoch: 40/50 -- Train Loss: 0.759 -- Validation Loss: 0.307 -- Validation ACC: 0.889 -- Validation F1: 0.917
+2024-07-16,21:30:20 [INFO] Epoch: 44/50 -- Train Loss: 0.265 -- Validation Loss: 0.318 -- Validation ACC: 0.833 -- Validation F1: 0.870
+2024-07-16,21:30:22 [INFO] Epoch: 45/50 -- Train Loss: 0.035 -- Validation Loss: 0.297 -- Validation ACC: 0.833 -- Validation F1: 0.870
+2024-07-16,21:30:24 [INFO] Epoch: 46/50 -- Train Loss: 0.949 -- Validation Loss: 0.283 -- Validation ACC: 0.889 -- Validation F1: 0.917
+2024-07-16,21:30:26 [INFO] Epoch: 47/50 -- Train Loss: 0.200 -- Validation Loss: 0.273 -- Validation ACC: 0.833 -- Validation F1: 0.880
+2024-07-16,21:30:27 [INFO] Epoch: 48/50 -- Train Loss: 0.126 -- Validation Loss: 0.270 -- Validation ACC: 0.889 -- Validation F1: 0.923
+2024-07-16,21:30:29 [INFO] Epoch: 49/50 -- Train Loss: 0.307 -- Validation Loss: 0.273 -- Validation ACC: 0.889 -- Validation F1: 0.923
+2024-07-16,21:30:29 [INFO] Run 0/5: Average Over Last 6 epochs -- Valid ACC: 0.861111111111111 -- Valid F1-score: 0.8969918191432953
+2024-07-16,21:30:30 [INFO] Test Results of Run 0/5: -- Test Loss: 0.795 -- Test ACC: 0.591 -- Test F1: 0.671
+2024-07-16,21:30:31 [INFO] Epoch: 0/50 -- Train Loss: 0.430 -- Validation Loss: 0.397 -- Validation ACC: 0.778 -- Validation F1: 0.818
+2024-07-16,21:30:44 [INFO] Epoch: 10/50 -- Train Loss: 0.489 -- Validation Loss: 0.304 -- Validation ACC: 0.833 -- Validation F1: 0.880
+2024-07-16,21:30:58 [INFO] Epoch: 20/50 -- Train Loss: 0.475 -- Validation Loss: 0.308 -- Validation ACC: 0.889 -- Validation F1: 0.917
+2024-07-16,21:31:13 [INFO] Epoch: 30/50 -- Train Loss: 0.392 -- Validation Loss: 0.289 -- Validation ACC: 0.833 -- Validation F1: 0.880
+2024-07-16,21:31:27 [INFO] Epoch: 40/50 -- Train Loss: 0.676 -- Validation Loss: 0.330 -- Validation ACC: 0.833 -- Validation F1: 0.870
+2024-07-16,21:31:33 [INFO] Epoch: 44/50 -- Train Loss: 0.128 -- Validation Loss: 0.297 -- Validation ACC: 0.833 -- Validation F1: 0.889
+2024-07-16,21:31:34 [INFO] Epoch: 45/50 -- Train Loss: 0.939 -- Validation Loss: 0.307 -- Validation ACC: 0.833 -- Validation F1: 0.889
+2024-07-16,21:31:36 [INFO] Epoch: 46/50 -- Train Loss: 0.427 -- Validation Loss: 0.318 -- Validation ACC: 0.833 -- Validation F1: 0.889
+2024-07-16,21:31:38 [INFO] Epoch: 47/50 -- Train Loss: 0.087 -- Validation Loss: 0.316 -- Validation ACC: 0.833 -- Validation F1: 0.889
+2024-07-16,21:31:40 [INFO] Epoch: 48/50 -- Train Loss: 0.641 -- Validation Loss: 0.319 -- Validation ACC: 0.833 -- Validation F1: 0.889
+2024-07-16,21:31:41 [INFO] Epoch: 49/50 -- Train Loss: 0.105 -- Validation Loss: 0.322 -- Validation ACC: 0.833 -- Validation F1: 0.889
+2024-07-16,21:31:41 [INFO] Run 1/5: Average Over Last 6 epochs -- Valid ACC: 0.8333333333333334 -- Valid F1-score: 0.8888888955116272
+2024-07-16,21:31:42 [INFO] Test Results of Run 1/5: -- Test Loss: 0.882 -- Test ACC: 0.609 -- Test F1: 0.710
+2024-07-16,21:31:43 [INFO] Epoch: 0/50 -- Train Loss: 0.465 -- Validation Loss: 0.369 -- Validation ACC: 0.778 -- Validation F1: 0.818
+2024-07-16,21:31:57 [INFO] Epoch: 10/50 -- Train Loss: 0.741 -- Validation Loss: 0.341 -- Validation ACC: 0.778 -- Validation F1: 0.846
+2024-07-16,21:32:11 [INFO] Epoch: 20/50 -- Train Loss: 0.482 -- Validation Loss: 0.358 -- Validation ACC: 0.833 -- Validation F1: 0.870
+2024-07-16,21:32:25 [INFO] Epoch: 30/50 -- Train Loss: 0.069 -- Validation Loss: 0.295 -- Validation ACC: 0.833 -- Validation F1: 0.889
+2024-07-16,21:32:39 [INFO] Epoch: 40/50 -- Train Loss: 0.341 -- Validation Loss: 0.339 -- Validation ACC: 0.833 -- Validation F1: 0.870
+2024-07-16,21:32:46 [INFO] Epoch: 44/50 -- Train Loss: 0.080 -- Validation Loss: 0.308 -- Validation ACC: 0.778 -- Validation F1: 0.833
+2024-07-16,21:32:47 [INFO] Epoch: 45/50 -- Train Loss: 0.622 -- Validation Loss: 0.314 -- Validation ACC: 0.778 -- Validation F1: 0.833
+2024-07-16,21:32:49 [INFO] Epoch: 46/50 -- Train Loss: 0.713 -- Validation Loss: 0.314 -- Validation ACC: 0.778 -- Validation F1: 0.833
+2024-07-16,21:32:51 [INFO] Epoch: 47/50 -- Train Loss: 0.658 -- Validation Loss: 0.327 -- Validation ACC: 0.833 -- Validation F1: 0.870
+2024-07-16,21:32:53 [INFO] Epoch: 48/50 -- Train Loss: 0.327 -- Validation Loss: 0.373 -- Validation ACC: 0.833 -- Validation F1: 0.870
+2024-07-16,21:32:54 [INFO] Epoch: 49/50 -- Train Loss: 0.431 -- Validation Loss: 0.402 -- Validation ACC: 0.833 -- Validation F1: 0.870
+2024-07-16,21:32:54 [INFO] Run 2/5: Average Over Last 6 epochs -- Valid ACC: 0.8055555555555555 -- Valid F1-score: 0.8514492511749268
+2024-07-16,21:32:55 [INFO] Test Results of Run 2/5: -- Test Loss: 0.715 -- Test ACC: 0.557 -- Test F1: 0.557
+2024-07-16,21:32:57 [INFO] Epoch: 0/50 -- Train Loss: 1.209 -- Validation Loss: 0.319 -- Validation ACC: 0.833 -- Validation F1: 0.880
+2024-07-16,21:33:11 [INFO] Epoch: 10/50 -- Train Loss: 0.764 -- Validation Loss: 0.367 -- Validation ACC: 0.778 -- Validation F1: 0.818
+2024-07-16,21:33:25 [INFO] Epoch: 20/50 -- Train Loss: 0.078 -- Validation Loss: 0.505 -- Validation ACC: 0.778 -- Validation F1: 0.867
+2024-07-16,21:33:39 [INFO] Epoch: 30/50 -- Train Loss: 0.318 -- Validation Loss: 0.295 -- Validation ACC: 0.833 -- Validation F1: 0.880
+2024-07-16,21:33:54 [INFO] Epoch: 40/50 -- Train Loss: 0.406 -- Validation Loss: 0.309 -- Validation ACC: 0.833 -- Validation F1: 0.870
+2024-07-16,21:33:59 [INFO] Epoch: 44/50 -- Train Loss: 1.474 -- Validation Loss: 0.319 -- Validation ACC: 0.833 -- Validation F1: 0.870
+2024-07-16,21:34:01 [INFO] Epoch: 45/50 -- Train Loss: 0.497 -- Validation Loss: 0.357 -- Validation ACC: 0.833 -- Validation F1: 0.870
+2024-07-16,21:34:03 [INFO] Epoch: 46/50 -- Train Loss: 0.288 -- Validation Loss: 0.404 -- Validation ACC: 0.833 -- Validation F1: 0.870
+2024-07-16,21:34:04 [INFO] Epoch: 47/50 -- Train Loss: 0.565 -- Validation Loss: 0.429 -- Validation ACC: 0.833 -- Validation F1: 0.870
+2024-07-16,21:34:06 [INFO] Epoch: 48/50 -- Train Loss: 0.579 -- Validation Loss: 0.431 -- Validation ACC: 0.833 -- Validation F1: 0.870
+2024-07-16,21:34:08 [INFO] Epoch: 49/50 -- Train Loss: 0.615 -- Validation Loss: 0.437 -- Validation ACC: 0.778 -- Validation F1: 0.818
+2024-07-16,21:34:08 [INFO] Run 3/5: Average Over Last 6 epochs -- Valid ACC: 0.8240740740740741 -- Valid F1-score: 0.8610012928644816
+2024-07-16,21:34:09 [INFO] Test Results of Run 3/5: -- Test Loss: 0.725 -- Test ACC: 0.557 -- Test F1: 0.557
+2024-07-16,21:34:10 [INFO] Epoch: 0/50 -- Train Loss: 0.128 -- Validation Loss: 0.385 -- Validation ACC: 0.833 -- Validation F1: 0.870
+2024-07-16,21:34:24 [INFO] Epoch: 10/50 -- Train Loss: 0.296 -- Validation Loss: 0.466 -- Validation ACC: 0.722 -- Validation F1: 0.762
+2024-07-16,21:34:38 [INFO] Epoch: 20/50 -- Train Loss: 0.557 -- Validation Loss: 0.318 -- Validation ACC: 0.778 -- Validation F1: 0.833
+2024-07-16,21:34:53 [INFO] Epoch: 30/50 -- Train Loss: 0.059 -- Validation Loss: 0.351 -- Validation ACC: 0.833 -- Validation F1: 0.870
+2024-07-16,21:35:07 [INFO] Epoch: 40/50 -- Train Loss: 0.505 -- Validation Loss: 0.458 -- Validation ACC: 0.722 -- Validation F1: 0.762
+2024-07-16,21:35:13 [INFO] Epoch: 44/50 -- Train Loss: 0.444 -- Validation Loss: 0.408 -- Validation ACC: 0.833 -- Validation F1: 0.870
+2024-07-16,21:35:15 [INFO] Epoch: 45/50 -- Train Loss: 0.429 -- Validation Loss: 0.395 -- Validation ACC: 0.833 -- Validation F1: 0.870
+2024-07-16,21:35:17 [INFO] Epoch: 46/50 -- Train Loss: 0.558 -- Validation Loss: 0.392 -- Validation ACC: 0.833 -- Validation F1: 0.870
+2024-07-16,21:35:19 [INFO] Epoch: 47/50 -- Train Loss: 0.458 -- Validation Loss: 0.432 -- Validation ACC: 0.833 -- Validation F1: 0.870
+2024-07-16,21:35:21 [INFO] Epoch: 48/50 -- Train Loss: 0.791 -- Validation Loss: 0.442 -- Validation ACC: 0.833 -- Validation F1: 0.870
+2024-07-16,21:35:22 [INFO] Epoch: 49/50 -- Train Loss: 0.636 -- Validation Loss: 0.420 -- Validation ACC: 0.833 -- Validation F1: 0.870
+2024-07-16,21:35:22 [INFO] Run 4/5: Average Over Last 6 epochs -- Valid ACC: 0.8333333333333334 -- Valid F1-score: 0.8695651888847351
+2024-07-16,21:35:23 [INFO] Test Results of Run 4/5: -- Test Loss: 0.717 -- Test ACC: 0.574 -- Test F1: 0.602
+2024-07-16,21:35:23 [INFO] Validation average after 5 runs -- ACC: 0.831 -- F1-score: 0.874
+2024-07-16,21:35:23 [INFO] Test average after 5 runs -- ACC: 0.577 -- F1-score: 0.619
+2024-07-16,21:35:23 [INFO] Finished round 7/10 of experiments!
+2024-07-16,21:35:23 [INFO] Started round 8/10 of experiments!
+2024-07-16,21:35:23 [INFO] Loading previous pretrained model at ./pretrained/GCN_Pretrained_2024-07-01-15-12-47.pth
+2024-07-16,21:35:24 [INFO] Pretrained GNN on Source Dataset -- Test Loss: 0.883 -- Test ACC: 0.696 -- Test F1-score: 0.733
+2024-07-16,21:35:25 [INFO] Pretrained GNN on Target Dataset Without Prompting: -- Validation Loss: 0.933 -- Validation ACC: 0.833 -- Validation F1-score: 0.889 -- Test Loss: 1.174 -- Test ACC: 0.652 -- Test F1-score: 0.714
+2024-07-16,21:35:26 [INFO] Epoch: 0/50 -- Train Loss: 0.434 -- Validation Loss: 1.027 -- Validation ACC: 0.778 -- Validation F1: 0.857
+2024-07-16,21:35:40 [INFO] Epoch: 10/50 -- Train Loss: 0.056 -- Validation Loss: 0.894 -- Validation ACC: 0.833 -- Validation F1: 0.889
+2024-07-16,21:35:53 [INFO] Epoch: 20/50 -- Train Loss: 0.005 -- Validation Loss: 0.944 -- Validation ACC: 0.833 -- Validation F1: 0.880
+2024-07-16,21:36:07 [INFO] Epoch: 30/50 -- Train Loss: 0.062 -- Validation Loss: 0.934 -- Validation ACC: 0.722 -- Validation F1: 0.800
+2024-07-16,21:36:21 [INFO] Epoch: 40/50 -- Train Loss: 0.470 -- Validation Loss: 0.912 -- Validation ACC: 0.778 -- Validation F1: 0.846
+2024-07-16,21:36:26 [INFO] Epoch: 44/50 -- Train Loss: 0.324 -- Validation Loss: 0.924 -- Validation ACC: 0.778 -- Validation F1: 0.846
+2024-07-16,21:36:29 [INFO] Epoch: 45/50 -- Train Loss: 0.793 -- Validation Loss: 0.922 -- Validation ACC: 0.778 -- Validation F1: 0.846
+2024-07-16,21:36:31 [INFO] Epoch: 46/50 -- Train Loss: 0.011 -- Validation Loss: 0.937 -- Validation ACC: 0.778 -- Validation F1: 0.846
+2024-07-16,21:36:32 [INFO] Epoch: 47/50 -- Train Loss: 0.469 -- Validation Loss: 0.949 -- Validation ACC: 0.778 -- Validation F1: 0.846
+2024-07-16,21:36:34 [INFO] Epoch: 48/50 -- Train Loss: 1.518 -- Validation Loss: 0.976 -- Validation ACC: 0.778 -- Validation F1: 0.846
+2024-07-16,21:36:35 [INFO] Epoch: 49/50 -- Train Loss: 0.806 -- Validation Loss: 0.997 -- Validation ACC: 0.778 -- Validation F1: 0.846
+2024-07-16,21:36:35 [INFO] Run 0/5: Average Over Last 6 epochs -- Valid ACC: 0.7777777777777778 -- Valid F1-score: 0.8461538553237915
+2024-07-16,21:36:36 [INFO] Test Results of Run 0/5: -- Test Loss: 1.295 -- Test ACC: 0.652 -- Test F1: 0.706
+2024-07-16,21:36:38 [INFO] Epoch: 0/50 -- Train Loss: 0.053 -- Validation Loss: 0.952 -- Validation ACC: 0.722 -- Validation F1: 0.800
+2024-07-16,21:36:51 [INFO] Epoch: 10/50 -- Train Loss: 0.070 -- Validation Loss: 0.865 -- Validation ACC: 0.833 -- Validation F1: 0.889
+2024-07-16,21:37:05 [INFO] Epoch: 20/50 -- Train Loss: 0.407 -- Validation Loss: 1.023 -- Validation ACC: 0.778 -- Validation F1: 0.846
+2024-07-16,21:37:19 [INFO] Epoch: 30/50 -- Train Loss: 0.375 -- Validation Loss: 0.807 -- Validation ACC: 0.833 -- Validation F1: 0.889
+2024-07-16,21:37:33 [INFO] Epoch: 40/50 -- Train Loss: 0.502 -- Validation Loss: 1.122 -- Validation ACC: 0.778 -- Validation F1: 0.833
+2024-07-16,21:37:38 [INFO] Epoch: 44/50 -- Train Loss: 0.750 -- Validation Loss: 1.203 -- Validation ACC: 0.778 -- Validation F1: 0.833
+2024-07-16,21:37:40 [INFO] Epoch: 45/50 -- Train Loss: 0.730 -- Validation Loss: 1.156 -- Validation ACC: 0.778 -- Validation F1: 0.833
+2024-07-16,21:37:42 [INFO] Epoch: 46/50 -- Train Loss: 0.012 -- Validation Loss: 1.111 -- Validation ACC: 0.778 -- Validation F1: 0.833
+2024-07-16,21:37:43 [INFO] Epoch: 47/50 -- Train Loss: 0.887 -- Validation Loss: 1.061 -- Validation ACC: 0.778 -- Validation F1: 0.846
+2024-07-16,21:37:45 [INFO] Epoch: 48/50 -- Train Loss: 0.321 -- Validation Loss: 1.014 -- Validation ACC: 0.833 -- Validation F1: 0.889
+2024-07-16,21:37:47 [INFO] Epoch: 49/50 -- Train Loss: 0.371 -- Validation Loss: 1.013 -- Validation ACC: 0.778 -- Validation F1: 0.857
+2024-07-16,21:37:47 [INFO] Run 1/5: Average Over Last 6 epochs -- Valid ACC: 0.7870370370370371 -- Valid F1-score: 0.8486975928147634
+2024-07-16,21:37:47 [INFO] Test Results of Run 1/5: -- Test Loss: 1.479 -- Test ACC: 0.678 -- Test F1: 0.748
+2024-07-16,21:37:49 [INFO] Epoch: 0/50 -- Train Loss: 0.042 -- Validation Loss: 0.925 -- Validation ACC: 0.778 -- Validation F1: 0.846
+2024-07-16,21:38:02 [INFO] Epoch: 10/50 -- Train Loss: 1.098 -- Validation Loss: 0.973 -- Validation ACC: 0.833 -- Validation F1: 0.889
+2024-07-16,21:38:15 [INFO] Epoch: 20/50 -- Train Loss: 1.231 -- Validation Loss: 1.267 -- Validation ACC: 0.778 -- Validation F1: 0.857
+2024-07-16,21:38:30 [INFO] Epoch: 30/50 -- Train Loss: 0.054 -- Validation Loss: 1.176 -- Validation ACC: 0.778 -- Validation F1: 0.857
+2024-07-16,21:38:44 [INFO] Epoch: 40/50 -- Train Loss: 0.470 -- Validation Loss: 1.123 -- Validation ACC: 0.722 -- Validation F1: 0.800
+2024-07-16,21:38:49 [INFO] Epoch: 44/50 -- Train Loss: 0.623 -- Validation Loss: 1.147 -- Validation ACC: 0.722 -- Validation F1: 0.800
+2024-07-16,21:38:51 [INFO] Epoch: 45/50 -- Train Loss: 1.083 -- Validation Loss: 1.105 -- Validation ACC: 0.722 -- Validation F1: 0.800
+2024-07-16,21:38:53 [INFO] Epoch: 46/50 -- Train Loss: 0.339 -- Validation Loss: 1.094 -- Validation ACC: 0.722 -- Validation F1: 0.800
+2024-07-16,21:38:55 [INFO] Epoch: 47/50 -- Train Loss: 0.336 -- Validation Loss: 1.097 -- Validation ACC: 0.722 -- Validation F1: 0.800
+2024-07-16,21:38:56 [INFO] Epoch: 48/50 -- Train Loss: 0.256 -- Validation Loss: 1.095 -- Validation ACC: 0.722 -- Validation F1: 0.800
+2024-07-16,21:38:58 [INFO] Epoch: 49/50 -- Train Loss: 0.532 -- Validation Loss: 1.087 -- Validation ACC: 0.722 -- Validation F1: 0.800
+2024-07-16,21:38:58 [INFO] Run 2/5: Average Over Last 6 epochs -- Valid ACC: 0.7222222222222222 -- Valid F1-score: 0.800000011920929
+2024-07-16,21:38:59 [INFO] Test Results of Run 2/5: -- Test Loss: 1.275 -- Test ACC: 0.652 -- Test F1: 0.692
+2024-07-16,21:39:01 [INFO] Epoch: 0/50 -- Train Loss: 0.166 -- Validation Loss: 0.875 -- Validation ACC: 0.778 -- Validation F1: 0.833
+2024-07-16,21:39:14 [INFO] Epoch: 10/50 -- Train Loss: 0.381 -- Validation Loss: 0.899 -- Validation ACC: 0.833 -- Validation F1: 0.889
+2024-07-16,21:39:28 [INFO] Epoch: 20/50 -- Train Loss: 0.487 -- Validation Loss: 0.849 -- Validation ACC: 0.778 -- Validation F1: 0.846
+2024-07-16,21:39:43 [INFO] Epoch: 30/50 -- Train Loss: 0.180 -- Validation Loss: 1.055 -- Validation ACC: 0.778 -- Validation F1: 0.833
+2024-07-16,21:39:58 [INFO] Epoch: 40/50 -- Train Loss: 0.908 -- Validation Loss: 1.154 -- Validation ACC: 0.833 -- Validation F1: 0.889
+2024-07-16,21:40:03 [INFO] Epoch: 44/50 -- Train Loss: 0.014 -- Validation Loss: 1.119 -- Validation ACC: 0.778 -- Validation F1: 0.833
+2024-07-16,21:40:05 [INFO] Epoch: 45/50 -- Train Loss: 0.088 -- Validation Loss: 1.162 -- Validation ACC: 0.778 -- Validation F1: 0.833
+2024-07-16,21:40:06 [INFO] Epoch: 46/50 -- Train Loss: 0.600 -- Validation Loss: 1.185 -- Validation ACC: 0.778 -- Validation F1: 0.833
+2024-07-16,21:40:08 [INFO] Epoch: 47/50 -- Train Loss: 0.345 -- Validation Loss: 1.194 -- Validation ACC: 0.778 -- Validation F1: 0.833
+2024-07-16,21:40:10 [INFO] Epoch: 48/50 -- Train Loss: 0.242 -- Validation Loss: 1.202 -- Validation ACC: 0.778 -- Validation F1: 0.833
+2024-07-16,21:40:12 [INFO] Epoch: 49/50 -- Train Loss: 0.857 -- Validation Loss: 1.203 -- Validation ACC: 0.778 -- Validation F1: 0.833
+2024-07-16,21:40:12 [INFO] Run 3/5: Average Over Last 6 epochs -- Valid ACC: 0.7777777777777778 -- Valid F1-score: 0.8333333134651184
+2024-07-16,21:40:12 [INFO] Test Results of Run 3/5: -- Test Loss: 1.354 -- Test ACC: 0.687 -- Test F1: 0.727
+2024-07-16,21:40:14 [INFO] Epoch: 0/50 -- Train Loss: 0.678 -- Validation Loss: 0.951 -- Validation ACC: 0.778 -- Validation F1: 0.833
+2024-07-16,21:40:27 [INFO] Epoch: 10/50 -- Train Loss: 0.027 -- Validation Loss: 1.234 -- Validation ACC: 0.722 -- Validation F1: 0.828
+2024-07-16,21:40:41 [INFO] Epoch: 20/50 -- Train Loss: 0.480 -- Validation Loss: 1.112 -- Validation ACC: 0.778 -- Validation F1: 0.846
+2024-07-16,21:40:55 [INFO] Epoch: 30/50 -- Train Loss: 1.635 -- Validation Loss: 1.110 -- Validation ACC: 0.778 -- Validation F1: 0.846
+2024-07-16,21:41:10 [INFO] Epoch: 40/50 -- Train Loss: 0.740 -- Validation Loss: 1.234 -- Validation ACC: 0.722 -- Validation F1: 0.800
+2024-07-16,21:41:16 [INFO] Epoch: 44/50 -- Train Loss: 1.540 -- Validation Loss: 1.199 -- Validation ACC: 0.722 -- Validation F1: 0.800
+2024-07-16,21:41:18 [INFO] Epoch: 45/50 -- Train Loss: 1.574 -- Validation Loss: 1.168 -- Validation ACC: 0.722 -- Validation F1: 0.800
+2024-07-16,21:41:20 [INFO] Epoch: 46/50 -- Train Loss: 0.130 -- Validation Loss: 1.123 -- Validation ACC: 0.722 -- Validation F1: 0.800
+2024-07-16,21:41:21 [INFO] Epoch: 47/50 -- Train Loss: 0.000 -- Validation Loss: 1.075 -- Validation ACC: 0.778 -- Validation F1: 0.833
+2024-07-16,21:41:23 [INFO] Epoch: 48/50 -- Train Loss: 0.311 -- Validation Loss: 1.053 -- Validation ACC: 0.778 -- Validation F1: 0.833
+2024-07-16,21:41:25 [INFO] Epoch: 49/50 -- Train Loss: 0.191 -- Validation Loss: 1.045 -- Validation ACC: 0.778 -- Validation F1: 0.833
+2024-07-16,21:41:25 [INFO] Run 4/5: Average Over Last 6 epochs -- Valid ACC: 0.75 -- Valid F1-score: 0.8166666626930237
+2024-07-16,21:41:25 [INFO] Test Results of Run 4/5: -- Test Loss: 1.255 -- Test ACC: 0.661 -- Test F1: 0.715
+2024-07-16,21:41:25 [INFO] Validation average after 5 runs -- ACC: 0.763 -- F1-score: 0.829
+2024-07-16,21:41:25 [INFO] Test average after 5 runs -- ACC: 0.666 -- F1-score: 0.718
+2024-07-16,21:41:25 [INFO] Finished round 8/10 of experiments!
+2024-07-16,21:41:25 [INFO] Started round 9/10 of experiments!
+2024-07-16,21:41:26 [INFO] Loading previous pretrained model at ./pretrained/GCN_Pretrained_2024-07-01-15-15-13.pth
+2024-07-16,21:41:27 [INFO] Pretrained GNN on Source Dataset -- Test Loss: 0.947 -- Test ACC: 0.757 -- Test F1-score: 0.785
+2024-07-16,21:41:27 [INFO] Pretrained GNN on Target Dataset Without Prompting: -- Validation Loss: 0.804 -- Validation ACC: 0.722 -- Validation F1-score: 0.762 -- Test Loss: 0.876 -- Test ACC: 0.739 -- Test F1-score: 0.789
+2024-07-16,21:41:29 [INFO] Epoch: 0/50 -- Train Loss: 1.464 -- Validation Loss: 0.835 -- Validation ACC: 0.722 -- Validation F1: 0.783
+2024-07-16,21:41:42 [INFO] Epoch: 10/50 -- Train Loss: 0.234 -- Validation Loss: 1.012 -- Validation ACC: 0.722 -- Validation F1: 0.762
+2024-07-16,21:41:56 [INFO] Epoch: 20/50 -- Train Loss: 0.063 -- Validation Loss: 0.850 -- Validation ACC: 0.778 -- Validation F1: 0.818
+2024-07-16,21:42:11 [INFO] Epoch: 30/50 -- Train Loss: 0.169 -- Validation Loss: 0.682 -- Validation ACC: 0.778 -- Validation F1: 0.818
+2024-07-16,21:42:25 [INFO] Epoch: 40/50 -- Train Loss: 0.072 -- Validation Loss: 0.755 -- Validation ACC: 0.722 -- Validation F1: 0.762
+2024-07-16,21:42:30 [INFO] Epoch: 44/50 -- Train Loss: 1.609 -- Validation Loss: 0.988 -- Validation ACC: 0.722 -- Validation F1: 0.762
+2024-07-16,21:42:32 [INFO] Epoch: 45/50 -- Train Loss: 0.011 -- Validation Loss: 1.045 -- Validation ACC: 0.722 -- Validation F1: 0.762
+2024-07-16,21:42:33 [INFO] Epoch: 46/50 -- Train Loss: 1.248 -- Validation Loss: 1.074 -- Validation ACC: 0.722 -- Validation F1: 0.762
+2024-07-16,21:42:35 [INFO] Epoch: 47/50 -- Train Loss: 0.448 -- Validation Loss: 1.072 -- Validation ACC: 0.722 -- Validation F1: 0.762
+2024-07-16,21:42:37 [INFO] Epoch: 48/50 -- Train Loss: 0.345 -- Validation Loss: 1.069 -- Validation ACC: 0.722 -- Validation F1: 0.762
+2024-07-16,21:42:39 [INFO] Epoch: 49/50 -- Train Loss: 0.056 -- Validation Loss: 1.049 -- Validation ACC: 0.722 -- Validation F1: 0.762
+2024-07-16,21:42:39 [INFO] Run 0/5: Average Over Last 6 epochs -- Valid ACC: 0.7222222222222222 -- Valid F1-score: 0.761904776096344
+2024-07-16,21:42:39 [INFO] Test Results of Run 0/5: -- Test Loss: 0.965 -- Test ACC: 0.696 -- Test F1: 0.745
+2024-07-16,21:42:41 [INFO] Epoch: 0/50 -- Train Loss: 0.139 -- Validation Loss: 0.701 -- Validation ACC: 0.778 -- Validation F1: 0.818
+2024-07-16,21:42:55 [INFO] Epoch: 10/50 -- Train Loss: 0.225 -- Validation Loss: 0.650 -- Validation ACC: 0.722 -- Validation F1: 0.762
+2024-07-16,21:43:09 [INFO] Epoch: 20/50 -- Train Loss: 0.199 -- Validation Loss: 0.468 -- Validation ACC: 0.833 -- Validation F1: 0.870
+2024-07-16,21:43:23 [INFO] Epoch: 30/50 -- Train Loss: 0.135 -- Validation Loss: 0.755 -- Validation ACC: 0.722 -- Validation F1: 0.762
+2024-07-16,21:43:37 [INFO] Epoch: 40/50 -- Train Loss: 0.126 -- Validation Loss: 0.763 -- Validation ACC: 0.722 -- Validation F1: 0.762
+2024-07-16,21:43:42 [INFO] Epoch: 44/50 -- Train Loss: 0.060 -- Validation Loss: 0.871 -- Validation ACC: 0.667 -- Validation F1: 0.700
+2024-07-16,21:43:44 [INFO] Epoch: 45/50 -- Train Loss: 0.099 -- Validation Loss: 0.855 -- Validation ACC: 0.667 -- Validation F1: 0.700
+2024-07-16,21:43:45 [INFO] Epoch: 46/50 -- Train Loss: 0.365 -- Validation Loss: 0.831 -- Validation ACC: 0.722 -- Validation F1: 0.762
+2024-07-16,21:43:47 [INFO] Epoch: 47/50 -- Train Loss: 0.069 -- Validation Loss: 0.809 -- Validation ACC: 0.722 -- Validation F1: 0.762
+2024-07-16,21:43:49 [INFO] Epoch: 48/50 -- Train Loss: 0.467 -- Validation Loss: 0.823 -- Validation ACC: 0.722 -- Validation F1: 0.762
+2024-07-16,21:43:51 [INFO] Epoch: 49/50 -- Train Loss: 1.744 -- Validation Loss: 0.809 -- Validation ACC: 0.722 -- Validation F1: 0.762
+2024-07-16,21:43:51 [INFO] Run 1/5: Average Over Last 6 epochs -- Valid ACC: 0.7037037037037037 -- Valid F1-score: 0.741269846757253
+2024-07-16,21:43:51 [INFO] Test Results of Run 1/5: -- Test Loss: 1.075 -- Test ACC: 0.678 -- Test F1: 0.722
+2024-07-16,21:43:53 [INFO] Epoch: 0/50 -- Train Loss: 0.124 -- Validation Loss: 0.708 -- Validation ACC: 0.722 -- Validation F1: 0.762
+2024-07-16,21:44:06 [INFO] Epoch: 10/50 -- Train Loss: 0.041 -- Validation Loss: 0.695 -- Validation ACC: 0.722 -- Validation F1: 0.762
+2024-07-16,21:44:20 [INFO] Epoch: 20/50 -- Train Loss: 0.000 -- Validation Loss: 0.656 -- Validation ACC: 0.722 -- Validation F1: 0.762
+2024-07-16,21:44:35 [INFO] Epoch: 30/50 -- Train Loss: 0.048 -- Validation Loss: 0.630 -- Validation ACC: 0.722 -- Validation F1: 0.762
+2024-07-16,21:44:49 [INFO] Epoch: 40/50 -- Train Loss: 0.460 -- Validation Loss: 1.017 -- Validation ACC: 0.722 -- Validation F1: 0.762
+2024-07-16,21:44:54 [INFO] Epoch: 44/50 -- Train Loss: 0.441 -- Validation Loss: 1.011 -- Validation ACC: 0.722 -- Validation F1: 0.762
+2024-07-16,21:44:56 [INFO] Epoch: 45/50 -- Train Loss: 0.213 -- Validation Loss: 1.020 -- Validation ACC: 0.722 -- Validation F1: 0.762
+2024-07-16,21:44:58 [INFO] Epoch: 46/50 -- Train Loss: 0.298 -- Validation Loss: 1.046 -- Validation ACC: 0.722 -- Validation F1: 0.762
+2024-07-16,21:45:00 [INFO] Epoch: 47/50 -- Train Loss: 0.382 -- Validation Loss: 1.045 -- Validation ACC: 0.722 -- Validation F1: 0.762
+2024-07-16,21:45:01 [INFO] Epoch: 48/50 -- Train Loss: 0.084 -- Validation Loss: 1.014 -- Validation ACC: 0.722 -- Validation F1: 0.762
+2024-07-16,21:45:03 [INFO] Epoch: 49/50 -- Train Loss: 0.013 -- Validation Loss: 0.977 -- Validation ACC: 0.722 -- Validation F1: 0.762
+2024-07-16,21:45:03 [INFO] Run 2/5: Average Over Last 6 epochs -- Valid ACC: 0.7222222222222222 -- Valid F1-score: 0.761904776096344
+2024-07-16,21:45:03 [INFO] Test Results of Run 2/5: -- Test Loss: 0.904 -- Test ACC: 0.722 -- Test F1: 0.775
+2024-07-16,21:45:05 [INFO] Epoch: 0/50 -- Train Loss: 0.142 -- Validation Loss: 0.755 -- Validation ACC: 0.722 -- Validation F1: 0.762
+2024-07-16,21:45:19 [INFO] Epoch: 10/50 -- Train Loss: 0.087 -- Validation Loss: 0.961 -- Validation ACC: 0.722 -- Validation F1: 0.762
+2024-07-16,21:45:32 [INFO] Epoch: 20/50 -- Train Loss: 1.615 -- Validation Loss: 1.001 -- Validation ACC: 0.722 -- Validation F1: 0.762
+2024-07-16,21:45:46 [INFO] Epoch: 30/50 -- Train Loss: 0.229 -- Validation Loss: 0.895 -- Validation ACC: 0.778 -- Validation F1: 0.818
+2024-07-16,21:46:00 [INFO] Epoch: 40/50 -- Train Loss: 0.322 -- Validation Loss: 1.018 -- Validation ACC: 0.722 -- Validation F1: 0.762
+2024-07-16,21:46:06 [INFO] Epoch: 44/50 -- Train Loss: 0.720 -- Validation Loss: 0.916 -- Validation ACC: 0.778 -- Validation F1: 0.818
+2024-07-16,21:46:08 [INFO] Epoch: 45/50 -- Train Loss: 0.219 -- Validation Loss: 0.914 -- Validation ACC: 0.722 -- Validation F1: 0.762
+2024-07-16,21:46:10 [INFO] Epoch: 46/50 -- Train Loss: 1.810 -- Validation Loss: 0.930 -- Validation ACC: 0.722 -- Validation F1: 0.762
+2024-07-16,21:46:12 [INFO] Epoch: 47/50 -- Train Loss: 0.221 -- Validation Loss: 0.922 -- Validation ACC: 0.722 -- Validation F1: 0.762
+2024-07-16,21:46:13 [INFO] Epoch: 48/50 -- Train Loss: 0.378 -- Validation Loss: 0.875 -- Validation ACC: 0.778 -- Validation F1: 0.818
+2024-07-16,21:46:15 [INFO] Epoch: 49/50 -- Train Loss: 0.067 -- Validation Loss: 0.865 -- Validation ACC: 0.778 -- Validation F1: 0.818
+2024-07-16,21:46:15 [INFO] Run 3/5: Average Over Last 6 epochs -- Valid ACC: 0.75 -- Valid F1-score: 0.790043294429779
+2024-07-16,21:46:16 [INFO] Test Results of Run 3/5: -- Test Loss: 0.985 -- Test ACC: 0.730 -- Test F1: 0.783
+2024-07-16,21:46:17 [INFO] Epoch: 0/50 -- Train Loss: 0.010 -- Validation Loss: 0.523 -- Validation ACC: 0.778 -- Validation F1: 0.818
+2024-07-16,21:46:31 [INFO] Epoch: 10/50 -- Train Loss: 0.336 -- Validation Loss: 0.922 -- Validation ACC: 0.722 -- Validation F1: 0.762
+2024-07-16,21:46:44 [INFO] Epoch: 20/50 -- Train Loss: 0.209 -- Validation Loss: 0.689 -- Validation ACC: 0.722 -- Validation F1: 0.762
+2024-07-16,21:46:59 [INFO] Epoch: 30/50 -- Train Loss: 1.500 -- Validation Loss: 0.835 -- Validation ACC: 0.722 -- Validation F1: 0.762
+2024-07-16,21:47:13 [INFO] Epoch: 40/50 -- Train Loss: 0.001 -- Validation Loss: 0.727 -- Validation ACC: 0.667 -- Validation F1: 0.750
+2024-07-16,21:47:19 [INFO] Epoch: 44/50 -- Train Loss: 0.026 -- Validation Loss: 0.705 -- Validation ACC: 0.722 -- Validation F1: 0.783
+2024-07-16,21:47:21 [INFO] Epoch: 45/50 -- Train Loss: 0.002 -- Validation Loss: 0.703 -- Validation ACC: 0.722 -- Validation F1: 0.783
+2024-07-16,21:47:23 [INFO] Epoch: 46/50 -- Train Loss: 0.475 -- Validation Loss: 0.705 -- Validation ACC: 0.722 -- Validation F1: 0.783
+2024-07-16,21:47:25 [INFO] Epoch: 47/50 -- Train Loss: 0.132 -- Validation Loss: 0.729 -- Validation ACC: 0.778 -- Validation F1: 0.818
+2024-07-16,21:47:27 [INFO] Epoch: 48/50 -- Train Loss: 0.243 -- Validation Loss: 0.751 -- Validation ACC: 0.722 -- Validation F1: 0.762
+2024-07-16,21:47:29 [INFO] Epoch: 49/50 -- Train Loss: 1.692 -- Validation Loss: 0.727 -- Validation ACC: 0.778 -- Validation F1: 0.818
+2024-07-16,21:47:29 [INFO] Run 4/5: Average Over Last 6 epochs -- Valid ACC: 0.7407407407407408 -- Valid F1-score: 0.7910157442092896
+2024-07-16,21:47:29 [INFO] Test Results of Run 4/5: -- Test Loss: 0.976 -- Test ACC: 0.730 -- Test F1: 0.783
+2024-07-16,21:47:29 [INFO] Validation average after 5 runs -- ACC: 0.728 -- F1-score: 0.769
+2024-07-16,21:47:29 [INFO] Test average after 5 runs -- ACC: 0.711 -- F1-score: 0.761
+2024-07-16,21:47:29 [INFO] Finished round 9/10 of experiments!
+2024-07-16,21:47:29 [INFO] Final results: -- Source Test Acc: 0.703 -- Source Test F1: 0.750 -- Target Valid Acc: 0.711 -- Target Valid F1: 0.770 -- Target Test Acc: 0.686 -- Target Test F1: 0.747 -- Prompt Test Acc: 0.674 -- Prompt Valid Acc: 0.700 -- Prompt Test F1: 0.737 -- Prompt Valid F1: 0.758
+2024-07-16,21:47:29 [INFO] Pretrained modela are saved to: ./pretrained/GCN_Pretrained_2024-07-01-14-54-05.pth ./pretrained/GCN_Pretrained_2024-07-01-14-56-23.pth ./pretrained/GCN_Pretrained_2024-07-01-14-58-41.pth ./pretrained/GCN_Pretrained_2024-07-01-15-00-59.pth ./pretrained/GCN_Pretrained_2024-07-01-15-03-17.pth ./pretrained/GCN_Pretrained_2024-07-01-15-05-37.pth ./pretrained/GCN_Pretrained_2024-07-01-15-07-56.pth ./pretrained/GCN_Pretrained_2024-07-01-15-10-20.pth ./pretrained/GCN_Pretrained_2024-07-01-15-12-47.pth ./pretrained/GCN_Pretrained_2024-07-01-15-15-13.pth

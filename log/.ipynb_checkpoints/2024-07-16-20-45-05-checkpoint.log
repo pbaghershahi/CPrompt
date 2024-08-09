@@ -1,0 +1,13 @@
+2024-07-16,20:45:05 [INFO] Logging to: ./log/2024-07-16-20-45-05.log
+2024-07-16,20:45:05 [INFO] Reading config from: ./config/dhfr.yaml
+2024-07-16,20:45:05 [INFO] Namespace(total_iters=10, prompt_method='flex_match', s_dataset='DHFR', t_dataset='DHFR', prompt_fn='gpf_plus', shift_type='structural', p_shift_intra=0.0, p_shift_inter=0.0, pretrain=True, save_pretrained=False, soft_label=False, add_link_loss=False, attn_with_param=False, empty_pretrained_dir=False, iterative_clustering=False, clutering_iters=3, entropy_div_ratio=3, w_entropy_loss=0.0, w_softmax_loss=0.0, w_domain_loss=0.0, r_reg=0.0, gnn_weight_decay=0.0, weight_decay=0.0, gnn_type='gcn', gnn_num_layers=3, pretrained_path=[], gnn_n_epochs=100, gnn_eval_step=10, gnn_h_dim=512, gnn_lr=0.01, gnn_step_size=50, gnn_gamma=0.5, gnn_batch_size=64, gnn_dropout=0.4, n_epochs=50, eval_step=10, h_dim=512, lr=0.01, step_size=50, gamma=0.5, batch_size=64, num_tokens=40, src_ratio=0.5, dropout=0.3, cut_off=0.5, aug_type='feature', light_aug_prob=0.1, light_aug_mode='mask', pos_aug_mode='mask', neg_aug_mode='arbitrary', noise_cov_scale=1.0, noise_mean_shift=1.0, noise_shift_mode='homophily', noise_select_mode='soft', cross_prune=0.8, inner_prune=0.3, num_runs=5, p_raug=0.15, n_raug=0.15, s_split=[0.65, 0.3], t_split=[0.65, 0.3], seed=[], config_from_file='./config/dhfr.yaml', config_to_file='', label_reduction=0.0)
+2024-07-16,20:45:05 [INFO] ####################################################################################################
+2024-07-16,20:45:05 [INFO] Args seeds: [1211 4851 4636 3627 3468 2525 1094 1181 4731 3110]
+2024-07-16,20:45:05 [INFO] Source Dataset: DHFR, Target Dataset: DHFR. Training, Test: Source: [0.65, 0.3], Target: [0.65, 0.3] -- Batch size: 64
+2024-07-16,20:45:05 [INFO] All input pretrained paths: []
+2024-07-16,20:45:05 [INFO] Started round 0/10 of experiments!
+2024-07-16,20:45:06 [INFO] Setting for pretraining: Model: {'gnn_type': 'gcn', 'in_channels': 56, 'hidden_channels': 512, 'out_channels': 2, 'num_layers': 3, 'dropout': 0.4, 'with_bn': False, 'with_head': True} -- Optimizer: {'lr': 0.01, 'scheduler_step_size': 50, 'scheduler_gamma': 0.5, 'weight_decay': 0.0} -- Training: {'n_epochs': 100}
+2024-07-16,20:45:06 [INFO] Pretraining GCN on DHFR started for 100 epochs
+2024-07-16,20:45:08 [INFO] GNN Before Pretraining: -- Test Loss: 0.696 -- Test ACC: 0.409 -- Test F1-score: 0.000
+2024-07-16,20:45:12 [INFO] Epoch: 10/100 -- Train Loss: 0.595 -- Validation Loss: 0.713 -- Validation ACC: 0.389 -- Validation F1: 0.560
+2024-07-16,20:45:15 [INFO] Epoch: 20/100 -- Train Loss: 0.497 -- Validation Loss: 0.575 -- Validation ACC: 0.611 -- Validation F1: 0.696

@@ -175,6 +175,7 @@ def main(args) -> None:
 
         pretrained_config = model_config
         num_tokens = int(np.ceil(cal_avg_num_nodes(t_dataset))) if args.num_tokens == -1 else args.num_tokens
+        logger.info(f"Total number of tokens: {num_tokens}")
         optimizer_config = dict(
             lr = args.lr,
             scheduler_step_size = args.step_size,
@@ -264,7 +265,8 @@ def main(args) -> None:
                 token_num = num_tokens,
                 cross_prune = args.cross_prune,
                 inner_prune = args.inner_prune,
-                attn_with_param = args.attn_with_param
+                attn_with_param = args.attn_with_param,
+                attn_dropout = args.dropout
             )
             training_config = dict(
                 aug_type = args.aug_type,
@@ -308,7 +310,12 @@ def main(args) -> None:
 
     results.average_results()
     results.report_results(logger)
-    
+
+    logger.info("List of important configs: ")
+    for akey, avalue in vars(args).items():
+        if akey in "prompt-method, num-tokens, shift-type, noise-shift-mode, attn-with-param, w-entropy-loss, w-softmax-loss, w-domain-loss, weight-decay, n-epochs, lr, batch-size, dropout, cut-off, light-aug-prob, light-aug-mode, pos-aug-mode, p-raug, label-reduction".replace(" ", "").replace("-", "_").split(","):
+            logger.info(f"{akey}: {avalue}")
+            
     if args.config_to_file != "":
         with open(args.config_to_file, 'w') as outfile:
             yaml.dump(vars(args), outfile, default_flow_style=False)
@@ -326,7 +333,7 @@ if __name__ == '__main__':
                         help="Target dataset: [Cora, CiteSeer, PubMed, ENZYMES, PROTEINS_full, AIDS, Letter-high, Letter-low, Letter-med, digg, oag, twitter, weibo]")
     parser.add_argument("-pf", "--prompt-fn", type=str, 
                         help="Prompting function for pseudo_labeling method: [add_tokens, gpf_plus, tucker]")
-    parser.add_argument("-shift", "--shift-type", type=str, default="feature", help="Shift Type: [feature, structural]")
+    parser.add_argument("-shift", "--shift-type", type=str, default="structural", help="Shift Type: [feature, structural]")
     parser.add_argument("-p-intra", "--p-shift-intra", type=float, default=0.0, help="Probability of intra class structural shift")
     parser.add_argument("-p-inter", "--p-shift-inter", type=float, default=0.0, help="Probability of inter class structural shift")
     parser.add_argument("--pretrain", action='store_true')
@@ -336,16 +343,16 @@ if __name__ == '__main__':
     parser.add_argument("--attn-with-param", action='store_true')
     parser.add_argument("--empty-pretrained-dir", action='store_true')
     parser.add_argument("--iterative-clustering", action='store_true')
-    parser.add_argument("--clutering-iters", type=int, default=3, help="Total rounds of updating cluster centers")
-    parser.add_argument("--entropy-div-ratio", type=int, default=3, help="Ratio of deviding samples based on entropy for clustering")
-    parser.add_argument("--w-entropy-loss", type=float, default=0.0, help="Weight of entropy loss")
-    parser.add_argument("--w-softmax-loss", type=float, default=0.0, help="Weight of softmax loss")
-    parser.add_argument("--w-domain-loss", type=float, default=0.0, help="Weight of domain loss")
-    parser.add_argument("--r-reg", type=float, default=0.0, help="Rate of regularization")
+    parser.add_argument("--clutering-iters", type=int, help="Total rounds of updating cluster centers")
+    parser.add_argument("--entropy-div-ratio", type=int, help="Ratio of deviding samples based on entropy for clustering")
+    parser.add_argument("--w-entropy-loss", type=float, help="Weight of entropy loss")
+    parser.add_argument("--w-softmax-loss", type=float, help="Weight of softmax loss")
+    parser.add_argument("--w-domain-loss", type=float, help="Weight of domain loss")
+    parser.add_argument("--r-reg", type=float, help="Rate of regularization")
     parser.add_argument("--gnn-weight-decay", type=float, default=0.0, help="Rate of regularization")
-    parser.add_argument("--weight-decay", type=float, default=0.0, help="Rate of regularization")
+    parser.add_argument("--weight-decay", type=float, help="Rate of regularization")
     parser.add_argument("-gnn", "--gnn-type", type=str, default="gcn", help="Type of base GNN: [gcn, gat, gin, sage]")
-    parser.add_argument("--gnn-num-layers", type=int, default=3, help="Number of layers of the base GNN")
+    parser.add_argument("--gnn-num-layers", type=int, help="Number of layers of the base GNN")
     parser.add_argument("--pretrained-path", nargs='*', default=[], type=str, help="Paths to the pretrained model")
     parser.add_argument("--gnn-n-epochs", type=int, help="Number of epochs for pretraining")
     parser.add_argument("--gnn-eval-step", type=int, default=10, help="Evaluation step for pretrained model")
@@ -356,18 +363,18 @@ if __name__ == '__main__':
     parser.add_argument("--gnn-batch-size", type=int, help="Batch size for pretraining")
     parser.add_argument("--gnn-dropout", type=float, help="Dropout for GNN")
     parser.add_argument("--n-epochs", type=int, help="Number of epochs for prompt tuning")
-    parser.add_argument("--eval-step", type=int, default=10, help="Evaluation step for prompt tuning")
+    parser.add_argument("--eval-step", type=int, help="Evaluation step for prompt tuning")
     parser.add_argument("--h-dim", type=int, help="Hidden dim for prompt tuning")
     parser.add_argument("-lr", "--lr", type=float, help="Learning rate for prompt tuning")
     parser.add_argument("--step-size", type=int, help="Learning rate step size for prompt tuning")
     parser.add_argument("--gamma", type=float, help="Learning rate gamma for prompt tuning")
     parser.add_argument("--batch-size", type=int, help="Batch size for prompt tuning")
-    parser.add_argument("--num-tokens", type=int, default=-1, help="Number of Tokens")
+    parser.add_argument("--num-tokens", type=int, help="Number of Tokens")
     parser.add_argument("--src-ratio", type=float, help="Split ratio for the source dataset")
     parser.add_argument("--dropout", type=float, help="Dropout for prompt tuning")
-    parser.add_argument("--cut-off", type=float, default=0.5, help="Cut-off threshold for pseudo labels")
+    parser.add_argument("--cut-off", type=float, help="Cut-off threshold for pseudo labels")
     parser.add_argument("--aug-type", type=str, default="feature", help="Augmentation Type: [feature, structural]")
-    parser.add_argument("--light-aug-prob", type=float, default=0.1, help="Probability of light augmentation augmentation")
+    parser.add_argument("--light-aug-prob", type=float, help="Probability of light augmentation augmentation")
     parser.add_argument("--light-aug-mode", type=str, default="mask", help="Light augmentation mode: [mask, arbitrary]")
     parser.add_argument("--pos-aug-mode", type=str, default="mask", help="Positive augmentation mode: [mask, arbitrary]")
     parser.add_argument("--neg-aug-mode", type=str, default="arbitrary", help="Negative augmentation mode: [mask, arbitrary]")
@@ -385,6 +392,6 @@ if __name__ == '__main__':
     parser.add_argument("--seed", nargs='*', default=[], type=int, help="Seed for random")
     parser.add_argument("--config-from-file", type=str, default="", help="Config file to read from")
     parser.add_argument("--config-to-file", type=str, default="", help="Config file to save to")
-    parser.add_argument("--label-reduction", type=float, default=0.0, help="Percentage of label reduction")
+    parser.add_argument("--label-reduction", type=float, help="Percentage of label reduction")
     args = parser.parse_args()
     main(args)
